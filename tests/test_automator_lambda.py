@@ -213,12 +213,33 @@ class TestReactionConfig(unittest.TestCase):
         self.assertEqual(reaction_config['type'], 'DELETE_MESSAGE')
         self.assertIn('thread_message', reaction_config)
     
-    def test_shameless_rules_no_thread_message(self):
-        """Verify that 'shameless-rules' reaction has no thread_message"""
+    def test_shameless_rules_has_thread_message(self):
+        """Verify that 'shameless-rules' reaction now has thread_message"""
         reaction_config = lambda_function.reaction_configs.get('shameless-rules')
         self.assertIsNotNone(reaction_config)
         self.assertEqual(reaction_config['type'], 'DELETE_MESSAGE')
-        self.assertNotIn('thread_message', reaction_config)
+        self.assertIn('thread_message', reaction_config)
+    
+    def test_jobs_rules_has_thread_message(self):
+        """Verify that 'jobs-rules' reaction has thread_message"""
+        reaction_config = lambda_function.reaction_configs.get('jobs-rules')
+        self.assertIsNotNone(reaction_config)
+        self.assertEqual(reaction_config['type'], 'DELETE_MESSAGE')
+        self.assertIn('thread_message', reaction_config)
+    
+    def test_ask_in_course_channel_has_thread_message(self):
+        """Verify that 'ask-in-course-channel' reaction has thread_message"""
+        reaction_config = lambda_function.reaction_configs.get('ask-in-course-channel')
+        self.assertIsNotNone(reaction_config)
+        self.assertEqual(reaction_config['type'], 'DELETE_MESSAGE')
+        self.assertIn('thread_message', reaction_config)
+    
+    def test_to_welcome_has_thread_message(self):
+        """Verify that 'to-welcome' reaction has thread_message"""
+        reaction_config = lambda_function.reaction_configs.get('to-welcome')
+        self.assertIsNotNone(reaction_config)
+        self.assertEqual(reaction_config['type'], 'DELETE_MESSAGE')
+        self.assertIn('thread_message', reaction_config)
     
     def test_action_handlers_has_delete_message(self):
         """Verify that DELETE_MESSAGE handler is registered"""
