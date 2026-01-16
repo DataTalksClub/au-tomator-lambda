@@ -79,6 +79,14 @@ reactions:
       Your post was removed from the channel. Please adjust your post.
 
       Apologies for the inconvenience. Thank you!
+    thread_message: |
+      Hi <@{user}>! 
+
+      Your message in <#{channel}> was removed because the parent message violated the shameless promotion rules.
+
+      If the topic starter reposts it following the proper template, you can continue the discussion there.
+
+      Apologies for the inconvenience. Thank you!
 
   - reaction: jobs-rules
     type: DELETE_MESSAGE
@@ -94,6 +102,14 @@ reactions:
       https://alexeygrigorev.notion.site/Jobs-b6ab78b9af504c8dac86413e7404fcfb
 
       Your post was removed from the channel. You're free to make adjustments and post again.
+
+      Apologies for the inconvenience. Thank you!
+    thread_message: |
+      Hi <@{user}>! 
+
+      Your message in <#{channel}> was removed because the parent message violated the jobs posting rules.
+
+      If the topic starter reposts it following the proper template, you can continue the discussion there.
 
       Apologies for the inconvenience. Thank you!
 
@@ -119,6 +135,14 @@ reactions:
       If your message is about a different course, you can find the full list of channels <https://slack.com/help/articles/205239967-Join-a-channel|here>.
 
       Apologies for the inconvenience. Thank you!
+    thread_message: |
+      Hi <@{user}>! 
+
+      Your message in <#{channel}> was removed because the parent message was posted in the wrong channel.
+
+      If the topic starter reposts it in the appropriate course channel, you can continue the discussion there.
+
+      Apologies for the inconvenience. Thank you!
 
   - reaction: to-welcome
     type: DELETE_MESSAGE
@@ -132,6 +156,14 @@ reactions:
       We use #welcome for your introduction.
       
       Your message was removed from the channel. Please post it again in #welcome.
+
+      Apologies for the inconvenience. Thank you!
+    thread_message: |
+      Hi <@{user}>! 
+
+      Your message in <#{channel}> was removed because the parent message should have been posted in #welcome.
+
+      If the topic starter reposts it in #welcome, you can continue the discussion there.
 
       Apologies for the inconvenience. Thank you!
 
