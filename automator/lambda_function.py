@@ -48,77 +48,32 @@ def handle_slack_post(event, reaction_config):
 
 
 def handle_delete_message(event, reaction_config):
-    message_pattern = reaction_config['message']
-
-    item = event['item']
-    channel = item['channel']
-    ts = item['ts']
-
-    message_details = slack.get_message_content(channel, ts)
-    user = message_details['user']
-    original_message = message_details['text']
-
-    values = {
-        'user': user,
-        'user_message': original_message,
-        'channel': channel,
-    }
-
-    if 'placeholders' in reaction_config:
-        values.update(reaction_config['placeholders'])
-
-    message_dm = util.format_message(message_pattern, values, channel)
-
-    slack.send_dm(user, message_dm)
-
-    if FAKE_DELETE:
-        logger.info(f"FAKE_DELETE for {channel} {ts}")
-    else:
-        slack.remove_message(channel, ts)
-
-
-def handle_ask_ai(event, reaction_config):
-    user, original_message = slack.get_message(event)
-
-    prompt = reaction_config['prompt_template'].format(user_message=original_message)
-    model = reaction_config['model']
-
-    ai_response = groqu.ai_request(prompt, model)
-    ai_response = slack.github_to_slack_markdown(ai_response)
-
-    logger.info("response from GROQ: " + ai_response)
-
-    message = reaction_config['answer_template'].format(user=user, ai_response=ai_response)
-
-    slack.post_message_thread(event, message)
-
-
-def handle_delete_with_threads(event, reaction_config):
-    """Delete a message and all its thread replies, sending DMs to all affected users"""
+    """Delete a message and optionally all its thread replies, sending DMs to affected users"""
     item = event['item']
     channel = item['channel']
     ts = item['ts']
     
     # Get parent message details
-    parent_message = slack.get_message_content(channel, ts)
-    if not parent_message:
-        logger.info(f"Parent message not found for {channel} {ts}")
+    message_details = slack.get_message_content(channel, ts)
+    if not message_details:
+        logger.info(f"Message not found for {channel} {ts}")
         return
     
-    parent_user = parent_message.get('user')
-    parent_text = parent_message.get('text', '')
+    user = message_details.get('user')
+    original_message = message_details.get('text', '')
     
     # Skip if there's no user (e.g., bot message or deleted message)
-    if not parent_user:
-        logger.info(f"Parent message has no user for {channel} {ts}")
+    if not user:
+        logger.info(f"Message has no user for {channel} {ts}")
         return
     
-    # Get thread replies
-    thread_replies = slack.get_thread_replies(channel, ts)
-    
-    # Delete all thread replies first
+    # Handle thread messages if thread_message is configured
     thread_message_pattern = reaction_config.get('thread_message')
     if thread_message_pattern:
+        # Get thread replies
+        thread_replies = slack.get_thread_replies(channel, ts)
+        
+        # Delete all thread replies first
         for reply in thread_replies:
             reply_user = reply.get('user')
             reply_ts = reply['ts']
@@ -145,33 +100,48 @@ def handle_delete_with_threads(event, reaction_config):
                     slack.remove_message(channel, reply_ts)
     
     # Now handle the parent message
-    parent_message_pattern = reaction_config['message']
+    message_pattern = reaction_config['message']
     
-    parent_values = {
-        'user': parent_user,
-        'user_message': parent_text,
+    values = {
+        'user': user,
+        'user_message': original_message,
         'channel': channel,
     }
     
     if 'placeholders' in reaction_config:
-        parent_values.update(reaction_config['placeholders'])
+        values.update(reaction_config['placeholders'])
     
-    parent_dm = util.format_message(parent_message_pattern, parent_values, channel)
+    message_dm = util.format_message(message_pattern, values, channel)
     
-    if parent_dm:
-        slack.send_dm(parent_user, parent_dm)
+    if message_dm:
+        slack.send_dm(user, message_dm)
     
     # Delete the parent message
     if FAKE_DELETE:
-        logger.info(f"FAKE_DELETE parent message for {channel} {ts}")
+        logger.info(f"FAKE_DELETE for {channel} {ts}")
     else:
         slack.remove_message(channel, ts)
+
+
+def handle_ask_ai(event, reaction_config):
+    user, original_message = slack.get_message(event)
+
+    prompt = reaction_config['prompt_template'].format(user_message=original_message)
+    model = reaction_config['model']
+
+    ai_response = groqu.ai_request(prompt, model)
+    ai_response = slack.github_to_slack_markdown(ai_response)
+
+    logger.info("response from GROQ: " + ai_response)
+
+    message = reaction_config['answer_template'].format(user=user, ai_response=ai_response)
+
+    slack.post_message_thread(event, message)
 
 
 action_handlers = {
     'SLACK_POST': handle_slack_post,
     'DELETE_MESSAGE': handle_delete_message,
-    'DELETE_WITH_THREADS': handle_delete_with_threads,
     'ASK_AI': handle_ask_ai,
 }
 
