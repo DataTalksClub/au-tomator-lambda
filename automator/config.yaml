@@ -6,6 +6,7 @@ channels:
   C01FABYF2RG: "course-data-engineering"
   C0288NJ5XSA: "course-ml-zoomcamp"
   C06TEGTGM3J: "course-llm-zoomcamp"
+  C09HWT76L95: "course-ai-dev-tools-zoomcamp"
 
 reactions:
   - reaction: dont-ask-to-ask-just-ask
@@ -135,7 +136,7 @@ reactions:
       Apologies for the inconvenience. Thank you!
 
   - reaction: delete
-    type: DELETE_WITH_THREADS
+    type: DELETE_MESSAGE
     message: |
       Hi <@{user}>! 
 
