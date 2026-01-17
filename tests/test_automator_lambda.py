@@ -434,6 +434,13 @@ class TestMultipleHandlers(unittest.TestCase):
         mock_slack.get_message_content.assert_called()
         # 2. SLACK_POST called post_message_thread
         mock_slack.post_message_thread.assert_called_once()
+        
+        # Verify the message was posted to the ORIGINAL thread, not the broadcast message
+        call_args = mock_slack.post_message_thread.call_args
+        posted_event = call_args[0][0]
+        self.assertEqual(posted_event['item']['ts'], '1234567890.123456', 
+                        "Message should be posted to original thread, not broadcast message")
+
 
 
 class TestSlackPost(unittest.TestCase):
