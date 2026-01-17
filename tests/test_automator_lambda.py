@@ -241,6 +241,17 @@ class TestReactionConfig(unittest.TestCase):
         self.assertEqual(reaction_config['type'], 'DELETE_MESSAGE')
         self.assertIn('thread_message', reaction_config)
     
+    def test_thread_please_reaction_exists(self):
+        """Verify that 'thread_please' reaction is configured"""
+        reaction_config = lambda_function.reaction_configs.get('thread_please')
+        self.assertIsNotNone(reaction_config)
+        self.assertEqual(reaction_config['type'], 'DELETE_MESSAGE')
+        self.assertIn('message', reaction_config)
+        # Verify the message contains expected text
+        message = reaction_config['message']
+        self.assertIn('broadcast', message.lower())
+        self.assertIn('guidelines', message.lower())
+    
     def test_action_handlers_has_delete_message(self):
         """Verify that DELETE_MESSAGE handler is registered"""
         self.assertIn('DELETE_MESSAGE', lambda_function.action_handlers)
@@ -261,12 +272,14 @@ class TestReactionConfig(unittest.TestCase):
             lambda_function.handle_remove_broadcast
         )
     
-    def test_thread_reaction_uses_multiple_handlers(self):
-        """Verify that 'thread' reaction uses multiple handlers"""
+    def test_thread_reaction_uses_single_handler(self):
+        """Verify that 'thread' reaction uses single SLACK_POST handler"""
         reaction_config = lambda_function.reaction_configs.get('thread')
         self.assertIsNotNone(reaction_config)
-        self.assertIn('types', reaction_config)
-        self.assertEqual(reaction_config['types'], ['REMOVE_BROADCAST', 'SLACK_POST'])
+        self.assertIn('type', reaction_config)
+        self.assertEqual(reaction_config['type'], 'SLACK_POST')
+        # Should not have 'types' (multiple handlers)
+        self.assertNotIn('types', reaction_config)
 
 
 class TestRemoveBroadcast(unittest.TestCase):
@@ -401,15 +414,9 @@ class TestMultipleHandlers(unittest.TestCase):
     
     @patch('automator_lambda_function.slack')
     @patch('automator_lambda_function.util')
-    def test_thread_reaction_executes_both_handlers(self, mock_util, mock_slack):
-        """Test that thread reaction executes both REMOVE_BROADCAST and SLACK_POST"""
-        # Setup mocks - broadcasted thread reply
-        mock_slack.get_message_content.return_value = {
-            'user': 'U123456',
-            'text': 'Reply sent to channel',
-            'ts': '1234567890.123457',
-            'thread_ts': '1234567890.123456'
-        }
+    def test_thread_reaction_executes_single_handler(self, mock_util, mock_slack):
+        """Test that thread reaction executes only SLACK_POST"""
+        # Setup mocks
         mock_util.format_message.return_value = None
         
         # Create event
@@ -429,150 +436,11 @@ class TestMultipleHandlers(unittest.TestCase):
         # Execute the full reaction processing
         lambda_function.process_reaction(body, event)
         
-        # Verify both handlers were called:
-        # 1. REMOVE_BROADCAST called get_message_content
-        mock_slack.get_message_content.assert_called()
-        # 2. SLACK_POST called post_message_thread
+        # Verify only SLACK_POST handler was called:
+        # SLACK_POST called post_message_thread
         mock_slack.post_message_thread.assert_called_once()
-        
-        # Verify the message was posted to the ORIGINAL thread, not the broadcast message
-        call_args = mock_slack.post_message_thread.call_args
-        posted_event = call_args[0][0]
-        self.assertEqual(posted_event['item']['ts'], '1234567890.123456', 
-                        "Message should be posted to original thread, not broadcast message")
-
-
-
-class TestSlackPost(unittest.TestCase):
-    """Test SLACK_POST handler for different message types"""
-    
-    @patch('automator_lambda_function.slack')
-    def test_regular_message_post(self, mock_slack):
-        """Test that regular messages post to the correct thread"""
-        # Setup mocks - regular message without thread_ts
-        mock_slack.get_message_content.return_value = {
-            'user': 'U123456',
-            'text': 'Regular message',
-            'ts': '1234567890.123456'
-        }
-        
-        # Create event
-        event = {
-            'item': {
-                'channel': 'C123456',
-                'ts': '1234567890.123456'
-            },
-            'reaction': 'thread'
-        }
-        
-        # Create reaction config
-        reaction_config = {
-            'message': 'Please use threads'
-        }
-        
-        # Execute
-        lambda_function.handle_slack_post(event, reaction_config)
-        
-        # Verify - should post to the same ts (the message itself)
-        mock_slack.post_message_thread.assert_called_once()
-        call_args = mock_slack.post_message_thread.call_args
-        posted_event = call_args[0][0]
-        self.assertEqual(posted_event['item']['ts'], '1234567890.123456')
-    
-    @patch('automator_lambda_function.slack')
-    def test_broadcasted_reply_post_to_original_thread(self, mock_slack):
-        """Test that broadcasted thread replies post to the original thread"""
-        # Setup mocks - broadcasted thread reply (thread_ts != ts)
-        mock_slack.get_message_content.return_value = {
-            'user': 'U123456',
-            'text': 'Reply sent to channel',
-            'ts': '1234567890.123457',
-            'thread_ts': '1234567890.123456'  # Different from ts - this is the original thread
-        }
-        
-        # Create event - reacting to the broadcasted message
-        event = {
-            'item': {
-                'channel': 'C123456',
-                'ts': '1234567890.123457'  # The broadcasted message ts
-            },
-            'reaction': 'thread'
-        }
-        
-        # Create reaction config
-        reaction_config = {
-            'message': 'Please use threads'
-        }
-        
-        # Execute
-        lambda_function.handle_slack_post(event, reaction_config)
-        
-        # Verify - should post to the original thread_ts, not the broadcast message ts
-        mock_slack.post_message_thread.assert_called_once()
-        call_args = mock_slack.post_message_thread.call_args
-        posted_event = call_args[0][0]
-        # The key fix: should use thread_ts (parent) not the broadcast message ts
-        self.assertEqual(posted_event['item']['ts'], '1234567890.123456')
-    
-    @patch('automator_lambda_function.slack')
-    def test_thread_parent_message_post(self, mock_slack):
-        """Test that parent thread messages post to themselves"""
-        # Setup mocks - parent message where thread_ts == ts
-        mock_slack.get_message_content.return_value = {
-            'user': 'U123456',
-            'text': 'Parent message',
-            'ts': '1234567890.123456',
-            'thread_ts': '1234567890.123456'  # Same as ts - this is the thread parent
-        }
-        
-        # Create event
-        event = {
-            'item': {
-                'channel': 'C123456',
-                'ts': '1234567890.123456'
-            },
-            'reaction': 'thread'
-        }
-        
-        # Create reaction config
-        reaction_config = {
-            'message': 'Please use threads'
-        }
-        
-        # Execute
-        lambda_function.handle_slack_post(event, reaction_config)
-        
-        # Verify - should post to the same ts (creates a thread on this message)
-        mock_slack.post_message_thread.assert_called_once()
-        call_args = mock_slack.post_message_thread.call_args
-        posted_event = call_args[0][0]
-        self.assertEqual(posted_event['item']['ts'], '1234567890.123456')
-    
-    @patch('automator_lambda_function.slack')
-    def test_message_not_found_gracefully_handled(self, mock_slack):
-        """Test that missing messages are handled gracefully"""
-        # Setup mocks - message not found
-        mock_slack.get_message_content.return_value = None
-        
-        # Create event
-        event = {
-            'item': {
-                'channel': 'C123456',
-                'ts': '1234567890.123456'
-            },
-            'reaction': 'thread'
-        }
-        
-        # Create reaction config
-        reaction_config = {
-            'message': 'Please use threads'
-        }
-        
-        # Execute
-        lambda_function.handle_slack_post(event, reaction_config)
-        
-        # Verify - should still post (fallback to original behavior)
-        mock_slack.post_message_thread.assert_called_once()
+        # REMOVE_BROADCAST should NOT be called (no get_message_content for removal)
+        mock_slack.remove_message.assert_not_called()
 
 
 class TestChannelConfig(unittest.TestCase):

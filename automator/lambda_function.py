@@ -32,7 +32,6 @@ def get_channel_name(channel_id):
 def handle_slack_post(event, reaction_config):
     channel_id = event['item']['channel']
     channel_name = get_channel_name(channel_id)
-    ts = event['item']['ts']
 
     if 'placeholders' in reaction_config:
         message = util.format_message(
@@ -44,17 +43,6 @@ def handle_slack_post(event, reaction_config):
             return
     else:
         message = reaction_config['message']
-    
-    # Check if this is a broadcasted thread reply
-    message_details = slack.get_message_content(channel_id, ts)
-    if message_details:
-        thread_ts = message_details.get('thread_ts')
-        # If it's a broadcasted reply (thread_ts != ts), use the original thread
-        if thread_ts is not None and thread_ts != ts:
-            # Modify event to use the original thread_ts
-            event = event.copy()
-            event['item'] = event['item'].copy()
-            event['item']['ts'] = thread_ts
     
     slack.post_message_thread(event, message)
 
