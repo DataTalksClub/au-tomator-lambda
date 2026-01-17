@@ -47,6 +47,48 @@ def handle_slack_post(event, reaction_config):
     slack.post_message_thread(event, message)
 
 
+def handle_remove_broadcast_and_post(event, reaction_config):
+    """Remove a broadcasted thread message from channel and post a reminder"""
+    item = event['item']
+    channel = item['channel']
+    ts = item['ts']
+    
+    # Get message details to check if it's a broadcasted thread reply
+    message_details = slack.get_message_content(channel, ts)
+    if not message_details:
+        logger.info(f"Message not found for {channel} {ts}")
+        return
+    
+    # Check if this is a broadcasted thread reply
+    # A broadcasted reply has thread_ts != ts (it's a reply in a thread)
+    thread_ts = message_details.get('thread_ts')
+    is_broadcasted_reply = thread_ts and thread_ts != ts
+    
+    if is_broadcasted_reply:
+        # Remove the broadcasted message from the channel
+        # (it will still remain in the thread)
+        if FAKE_DELETE:
+            logger.info(f"FAKE_DELETE broadcasted message for {channel} {ts}")
+        else:
+            slack.remove_message(channel, ts)
+    
+    # Post the reminder message (always do this)
+    channel_name = get_channel_name(channel)
+    
+    if 'placeholders' in reaction_config:
+        message = util.format_message(
+            reaction_config['message'],
+            reaction_config['placeholders'],
+            channel_name
+        )
+        if message is None:
+            return
+    else:
+        message = reaction_config['message']
+    
+    slack.post_message_thread(event, message)
+
+
 def handle_delete_message(event, reaction_config):
     """Delete a message and optionally all its thread replies, sending DMs to affected users"""
     item = event['item']
@@ -143,6 +185,7 @@ action_handlers = {
     'SLACK_POST': handle_slack_post,
     'DELETE_MESSAGE': handle_delete_message,
     'ASK_AI': handle_ask_ai,
+    'REMOVE_BROADCAST_AND_POST': handle_remove_broadcast_and_post,
 }
 
 

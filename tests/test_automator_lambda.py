@@ -252,6 +252,157 @@ class TestReactionConfig(unittest.TestCase):
     def test_action_handlers_no_delete_with_threads(self):
         """Verify that DELETE_WITH_THREADS handler is removed"""
         self.assertNotIn('DELETE_WITH_THREADS', lambda_function.action_handlers)
+    
+    def test_action_handlers_has_remove_broadcast_and_post(self):
+        """Verify that REMOVE_BROADCAST_AND_POST handler is registered"""
+        self.assertIn('REMOVE_BROADCAST_AND_POST', lambda_function.action_handlers)
+        self.assertEqual(
+            lambda_function.action_handlers['REMOVE_BROADCAST_AND_POST'],
+            lambda_function.handle_remove_broadcast_and_post
+        )
+    
+    def test_thread_reaction_uses_remove_broadcast_and_post(self):
+        """Verify that 'thread' reaction uses REMOVE_BROADCAST_AND_POST"""
+        reaction_config = lambda_function.reaction_configs.get('thread')
+        self.assertIsNotNone(reaction_config)
+        self.assertEqual(reaction_config['type'], 'REMOVE_BROADCAST_AND_POST')
+
+
+class TestRemoveBroadcastAndPost(unittest.TestCase):
+    """Test REMOVE_BROADCAST_AND_POST handler"""
+    
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.util')
+    def test_regular_message_only_posts(self, mock_util, mock_slack):
+        """Test that regular messages (not broadcasted) only get a reply"""
+        # Setup mocks - regular message without thread_ts
+        mock_slack.get_message_content.return_value = {
+            'user': 'U123456',
+            'text': 'Regular message',
+            'ts': '1234567890.123456'
+        }
+        mock_util.format_message.return_value = None
+        
+        # Create event
+        event = {
+            'item': {
+                'channel': 'C123456',
+                'ts': '1234567890.123456'
+            },
+            'reaction': 'thread'
+        }
+        
+        # Create reaction config
+        reaction_config = {
+            'message': 'Please use threads',
+            'type': 'REMOVE_BROADCAST_AND_POST'
+        }
+        
+        # Execute
+        lambda_function.handle_remove_broadcast_and_post(event, reaction_config)
+        
+        # Verify - should not delete, only post message
+        mock_slack.remove_message.assert_not_called()
+        mock_slack.post_message_thread.assert_called_once()
+    
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.util')
+    def test_broadcasted_reply_deletes_and_posts(self, mock_util, mock_slack):
+        """Test that broadcasted thread replies are deleted AND get a reply"""
+        # Setup mocks - broadcasted thread reply (thread_ts != ts)
+        mock_slack.get_message_content.return_value = {
+            'user': 'U123456',
+            'text': 'Reply sent to channel',
+            'ts': '1234567890.123457',
+            'thread_ts': '1234567890.123456'  # Different from ts
+        }
+        mock_util.format_message.return_value = None
+        
+        # Create event
+        event = {
+            'item': {
+                'channel': 'C123456',
+                'ts': '1234567890.123457'
+            },
+            'reaction': 'thread'
+        }
+        
+        # Create reaction config
+        reaction_config = {
+            'message': 'Please use threads',
+            'type': 'REMOVE_BROADCAST_AND_POST'
+        }
+        
+        # Execute
+        lambda_function.handle_remove_broadcast_and_post(event, reaction_config)
+        
+        # Verify - in FAKE_DELETE mode, remove_message is not called but logged
+        # Since FAKE_DELETE=1 is set, we just verify the post was called
+        mock_slack.post_message_thread.assert_called_once()
+    
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.util')
+    def test_parent_message_only_posts(self, mock_util, mock_slack):
+        """Test that parent messages (thread_ts == ts) only get a reply"""
+        # Setup mocks - parent message where thread_ts == ts
+        mock_slack.get_message_content.return_value = {
+            'user': 'U123456',
+            'text': 'Parent message',
+            'ts': '1234567890.123456',
+            'thread_ts': '1234567890.123456'  # Same as ts
+        }
+        mock_util.format_message.return_value = None
+        
+        # Create event
+        event = {
+            'item': {
+                'channel': 'C123456',
+                'ts': '1234567890.123456'
+            },
+            'reaction': 'thread'
+        }
+        
+        # Create reaction config
+        reaction_config = {
+            'message': 'Please use threads',
+            'type': 'REMOVE_BROADCAST_AND_POST'
+        }
+        
+        # Execute
+        lambda_function.handle_remove_broadcast_and_post(event, reaction_config)
+        
+        # Verify - should not delete (parent message), only post
+        mock_slack.remove_message.assert_not_called()
+        mock_slack.post_message_thread.assert_called_once()
+    
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.util')
+    def test_message_not_found(self, mock_util, mock_slack):
+        """Test handler gracefully handles missing message"""
+        # Setup mocks - message not found
+        mock_slack.get_message_content.return_value = None
+        
+        # Create event
+        event = {
+            'item': {
+                'channel': 'C123456',
+                'ts': '1234567890.123456'
+            },
+            'reaction': 'thread'
+        }
+        
+        # Create reaction config
+        reaction_config = {
+            'message': 'Please use threads',
+            'type': 'REMOVE_BROADCAST_AND_POST'
+        }
+        
+        # Execute
+        lambda_function.handle_remove_broadcast_and_post(event, reaction_config)
+        
+        # Verify - should not delete or post when message not found
+        mock_slack.remove_message.assert_not_called()
+        mock_slack.post_message_thread.assert_not_called()
 
 
 class TestChannelConfig(unittest.TestCase):

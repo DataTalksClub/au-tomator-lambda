@@ -15,7 +15,7 @@ reactions:
       Don't ask to ask: https://dontasktoask.com/
 
   - reaction: thread
-    type: SLACK_POST
+    type: REMOVE_BROADCAST_AND_POST
     message: >
       Please use threads to keep the discussion more organized:
       https://datatalks.club/slack/guidelines.html#taking-part-in-discussions

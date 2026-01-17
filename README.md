@@ -107,8 +107,9 @@ For reactions with channel-specific placeholders (like `{link}` in the `faq` rea
    - Action: Posts a message encouraging users to ask their questions directly
 
 2. `thread`:
-   - Type: `SLACK_POST`
+   - Type: `REMOVE_BROADCAST_AND_POST`
    - Action: Reminds users to use threads for organized discussions
+   - Special behavior: If the message is a thread reply that was "also sent to channel" (broadcasted), it removes the message from the channel view while keeping it in the thread, then posts the reminder message
 
 3. `faq`:
    - Type: `SLACK_POST`
