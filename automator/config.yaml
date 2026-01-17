@@ -15,12 +15,27 @@ reactions:
       Don't ask to ask: https://dontasktoask.com/
 
   - reaction: thread
-    types:
-      - REMOVE_BROADCAST
-      - SLACK_POST
+    type: SLACK_POST
     message: >
       Please use threads to keep the discussion more organized:
       https://datatalks.club/slack/guidelines.html#taking-part-in-discussions
+
+  - reaction: thread_please
+    type: DELETE_MESSAGE
+    message: |
+      Hi <@{user}>! 
+
+      You posted this message in <#{channel}>:
+
+      > {user_message}
+
+      Please don't use the "Also send to channel" (broadcast) functionality when replying in threads. This is against our community guidelines:
+
+      https://datatalks.club/slack/guidelines.html#taking-part-in-discussions
+
+      Your message was removed from the channel. Feel free to repost it in the thread without using the broadcast functionality.
+
+      Thank you for helping us keep the community organized!
 
   - reaction: faq
     type: SLACK_POST
