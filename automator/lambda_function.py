@@ -62,7 +62,7 @@ def handle_remove_broadcast(event, reaction_config):
     # Check if this is a broadcasted thread reply
     # A broadcasted reply has thread_ts != ts (it's a reply in a thread)
     thread_ts = message_details.get('thread_ts')
-    is_broadcasted_reply = thread_ts and thread_ts != ts
+    is_broadcasted_reply = thread_ts is not None and thread_ts != ts
     
     if is_broadcasted_reply:
         # Remove the broadcasted message from the channel
@@ -188,12 +188,15 @@ def process_reaction(body, event):
     # Support both single type and list of types (multiple handlers)
     action_types = reaction_config.get('types') or [reaction_config.get('type')]
     
-    if not action_types or action_types[0] is None:
+    if not action_types or not any(action_types):
         logger.info(f"no action type configured for {reaction}")
         return
     
     # Execute all handlers in sequence
     for action_type in action_types:
+        if not action_type:
+            continue
+        
         action_handler = action_handlers.get(action_type)
         
         if action_handler:
