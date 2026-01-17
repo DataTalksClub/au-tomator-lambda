@@ -243,7 +243,7 @@ class TestReactionConfig(unittest.TestCase):
     
     def test_thread_please_reaction_exists(self):
         """Verify that 'thread_please' reaction is configured"""
-        reaction_config = lambda_function.reaction_configs.get('thread_please')
+        reaction_config = lambda_function.reaction_configs.get('thread-please')
         self.assertIsNotNone(reaction_config)
         self.assertEqual(reaction_config['type'], 'DELETE_MESSAGE')
         self.assertIn('message', reaction_config)
