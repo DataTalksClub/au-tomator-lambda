@@ -47,6 +47,35 @@ def handle_slack_post(event, reaction_config):
     slack.post_message_thread(event, message)
 
 
+def handle_remove_broadcast(event, reaction_config):
+    """Remove a broadcasted thread message from channel (keeps it in the thread)"""
+    item = event['item']
+    channel = item['channel']
+    ts = item['ts']
+    
+    # Get message details to check if it's a broadcasted thread reply
+    message_details = slack.get_message_content(channel, ts)
+    if not message_details:
+        logger.info(f"Message not found for {channel} {ts}")
+        return
+    
+    # Check if this is a broadcasted thread reply
+    # A broadcasted reply has thread_ts != ts (it's a reply in a thread)
+    thread_ts = message_details.get('thread_ts')
+    is_broadcasted_reply = thread_ts is not None and thread_ts != ts
+    
+    if is_broadcasted_reply:
+        # Remove the broadcasted message from the channel
+        # (it will still remain in the thread)
+        if FAKE_DELETE:
+            logger.info(f"FAKE_DELETE broadcasted message for {channel} {ts}")
+        else:
+            slack.remove_message(channel, ts)
+        logger.info(f"Removed broadcasted message from channel {channel} (kept in thread)")
+    else:
+        logger.info(f"Message {ts} is not a broadcasted reply, skipping removal")
+
+
 def handle_delete_message(event, reaction_config):
     """Delete a message and optionally all its thread replies, sending DMs to affected users"""
     item = event['item']
@@ -143,6 +172,7 @@ action_handlers = {
     'SLACK_POST': handle_slack_post,
     'DELETE_MESSAGE': handle_delete_message,
     'ASK_AI': handle_ask_ai,
+    'REMOVE_BROADCAST': handle_remove_broadcast,
 }
 
 
@@ -155,13 +185,24 @@ def process_reaction(body, event):
 
     reaction_config = reaction_configs[reaction]
 
-    action_type = reaction_config['type']
-    action_handler = action_handlers.get(action_type)
+    # Support both single type and list of types (multiple handlers)
+    action_types = reaction_config.get('types') or [reaction_config.get('type')]
     
-    if action_handler:
-        action_handler(event, reaction_config)
-    else:
-        logger.info(f"no handler for {action_type}")
+    if not action_types or not any(action_types):
+        logger.info(f"no action type configured for {reaction}")
+        return
+    
+    # Execute all handlers in sequence
+    for action_type in action_types:
+        if not action_type:
+            continue
+        
+        action_handler = action_handlers.get(action_type)
+        
+        if action_handler:
+            action_handler(event, reaction_config)
+        else:
+            logger.info(f"no handler for {action_type}")
 
 
 def run(body):

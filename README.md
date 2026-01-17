@@ -74,13 +74,26 @@ channels:
 ```
 ### 3. Reactions
 
-This section defines automated responses to specific reactions or triggers in the Slack workspace. Each reaction has a type, corresponding action, and may include placeholders.
+This section defines automated responses to specific reactions or triggers in the Slack workspace. Each reaction has a type (or types for multiple handlers), corresponding action, and may include placeholders.
 
 #### Reaction Types:
 
 1. `SLACK_POST`: Posts a message in the Slack channel
 2. `DELETE_MESSAGE`: Removes a message and sends a notification to the user
 3. `ASK_AI`: Utilizes an AI model to generate a response
+4. `REMOVE_BROADCAST`: Removes a broadcasted thread reply from the channel (keeps it in the thread)
+
+#### Multiple Handlers:
+
+Reactions can have multiple handlers that execute in sequence. Use `types` (list) instead of `type` (single) to define multiple handlers:
+
+```yaml
+- reaction: thread
+  types:
+    - REMOVE_BROADCAST  # First: remove if broadcasted
+    - SLACK_POST        # Then: post reminder message
+  message: "Please use threads..."
+```
 
 #### Pre-defined Placeholders:
 
@@ -107,8 +120,11 @@ For reactions with channel-specific placeholders (like `{link}` in the `faq` rea
    - Action: Posts a message encouraging users to ask their questions directly
 
 2. `thread`:
-   - Type: `SLACK_POST`
-   - Action: Reminds users to use threads for organized discussions
+   - Types: `REMOVE_BROADCAST`, `SLACK_POST` (multiple handlers)
+   - Actions: 
+     1. `REMOVE_BROADCAST`: If the message is a thread reply that was "also sent to channel" (broadcasted), removes it from the channel view (keeps it in the thread)
+     2. `SLACK_POST`: Posts a reminder message about using threads
+   - Note: This demonstrates the ability to use multiple handlers for a single reaction
 
 3. `faq`:
    - Type: `SLACK_POST`
