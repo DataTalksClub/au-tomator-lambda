@@ -20,7 +20,7 @@ reactions:
       Please use threads to keep the discussion more organized:
       https://datatalks.club/slack/guidelines.html#taking-part-in-discussions
 
-  - reaction: thread-please
+  - reaction: thread_please
     type: DELETE_MESSAGE
     message: |
       Hi <@{user}>! 
