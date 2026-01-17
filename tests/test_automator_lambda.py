@@ -436,6 +436,138 @@ class TestMultipleHandlers(unittest.TestCase):
         mock_slack.post_message_thread.assert_called_once()
 
 
+class TestSlackPost(unittest.TestCase):
+    """Test SLACK_POST handler for different message types"""
+    
+    @patch('automator_lambda_function.slack')
+    def test_regular_message_post(self, mock_slack):
+        """Test that regular messages post to the correct thread"""
+        # Setup mocks - regular message without thread_ts
+        mock_slack.get_message_content.return_value = {
+            'user': 'U123456',
+            'text': 'Regular message',
+            'ts': '1234567890.123456'
+        }
+        
+        # Create event
+        event = {
+            'item': {
+                'channel': 'C123456',
+                'ts': '1234567890.123456'
+            },
+            'reaction': 'thread'
+        }
+        
+        # Create reaction config
+        reaction_config = {
+            'message': 'Please use threads'
+        }
+        
+        # Execute
+        lambda_function.handle_slack_post(event, reaction_config)
+        
+        # Verify - should post to the same ts (the message itself)
+        mock_slack.post_message_thread.assert_called_once()
+        call_args = mock_slack.post_message_thread.call_args
+        posted_event = call_args[0][0]
+        self.assertEqual(posted_event['item']['ts'], '1234567890.123456')
+    
+    @patch('automator_lambda_function.slack')
+    def test_broadcasted_reply_post_to_original_thread(self, mock_slack):
+        """Test that broadcasted thread replies post to the original thread"""
+        # Setup mocks - broadcasted thread reply (thread_ts != ts)
+        mock_slack.get_message_content.return_value = {
+            'user': 'U123456',
+            'text': 'Reply sent to channel',
+            'ts': '1234567890.123457',
+            'thread_ts': '1234567890.123456'  # Different from ts - this is the original thread
+        }
+        
+        # Create event - reacting to the broadcasted message
+        event = {
+            'item': {
+                'channel': 'C123456',
+                'ts': '1234567890.123457'  # The broadcasted message ts
+            },
+            'reaction': 'thread'
+        }
+        
+        # Create reaction config
+        reaction_config = {
+            'message': 'Please use threads'
+        }
+        
+        # Execute
+        lambda_function.handle_slack_post(event, reaction_config)
+        
+        # Verify - should post to the original thread_ts, not the broadcast message ts
+        mock_slack.post_message_thread.assert_called_once()
+        call_args = mock_slack.post_message_thread.call_args
+        posted_event = call_args[0][0]
+        # The key fix: should use thread_ts (parent) not the broadcast message ts
+        self.assertEqual(posted_event['item']['ts'], '1234567890.123456')
+    
+    @patch('automator_lambda_function.slack')
+    def test_thread_parent_message_post(self, mock_slack):
+        """Test that parent thread messages post to themselves"""
+        # Setup mocks - parent message where thread_ts == ts
+        mock_slack.get_message_content.return_value = {
+            'user': 'U123456',
+            'text': 'Parent message',
+            'ts': '1234567890.123456',
+            'thread_ts': '1234567890.123456'  # Same as ts - this is the thread parent
+        }
+        
+        # Create event
+        event = {
+            'item': {
+                'channel': 'C123456',
+                'ts': '1234567890.123456'
+            },
+            'reaction': 'thread'
+        }
+        
+        # Create reaction config
+        reaction_config = {
+            'message': 'Please use threads'
+        }
+        
+        # Execute
+        lambda_function.handle_slack_post(event, reaction_config)
+        
+        # Verify - should post to the same ts (creates a thread on this message)
+        mock_slack.post_message_thread.assert_called_once()
+        call_args = mock_slack.post_message_thread.call_args
+        posted_event = call_args[0][0]
+        self.assertEqual(posted_event['item']['ts'], '1234567890.123456')
+    
+    @patch('automator_lambda_function.slack')
+    def test_message_not_found_gracefully_handled(self, mock_slack):
+        """Test that missing messages are handled gracefully"""
+        # Setup mocks - message not found
+        mock_slack.get_message_content.return_value = None
+        
+        # Create event
+        event = {
+            'item': {
+                'channel': 'C123456',
+                'ts': '1234567890.123456'
+            },
+            'reaction': 'thread'
+        }
+        
+        # Create reaction config
+        reaction_config = {
+            'message': 'Please use threads'
+        }
+        
+        # Execute
+        lambda_function.handle_slack_post(event, reaction_config)
+        
+        # Verify - should still post (fallback to original behavior)
+        mock_slack.post_message_thread.assert_called_once()
+
+
 class TestChannelConfig(unittest.TestCase):
     """Test that channel configurations are correct"""
     
