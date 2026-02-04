@@ -59,7 +59,9 @@ def get_message_content(channel, ts):
     response.raise_for_status()
 
     response_json = response.json()
-    all_messages = response_json['messages']
+    all_messages = response_json.get('messages', [])
+    if not all_messages:
+        return None
     message = find_message_by_ts(all_messages, ts)
     return message
 

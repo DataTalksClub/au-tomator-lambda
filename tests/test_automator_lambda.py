@@ -202,6 +202,38 @@ class TestDeleteMessage(unittest.TestCase):
         # Verify - should send DMs to parent and 2 user replies (3 total), skipping bot
         assert mock_slack.send_dm.call_count == 3
 
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.util')
+    def test_delete_message_with_curly_braces_in_user_message(self, mock_util, mock_slack):
+        """Test DELETE_MESSAGE handles curly braces in user message (e.g., {POSTGRES_DB})"""
+        # Setup mocks - user message contains curly braces like environment variables
+        mock_slack.get_message_content.return_value = {
+            'user': 'U123456',
+            'text': 'How do I set {POSTGRES_DB} in my environment?'
+        }
+        mock_util.format_message.return_value = "DM message to user"
+
+        # Create event
+        event = {
+            'item': {
+                'channel': 'C123456',
+                'ts': '1234567890.123456'
+            },
+            'reaction': 'ask-in-course-channel'
+        }
+
+        # Create reaction config
+        reaction_config = {
+            'message': 'Hi <@{user}>! Your message: > {user_message} was removed.',
+            'type': 'DELETE_MESSAGE'
+        }
+
+        # Execute - should not raise KeyError
+        lambda_function.handle_delete_message(event, reaction_config)
+
+        # Verify
+        mock_slack.send_dm.assert_called_once_with('U123456', "DM message to user")
+
 
 class TestReactionConfig(unittest.TestCase):
     """Test that reaction configs are properly loaded"""
@@ -468,6 +500,48 @@ class TestChannelConfig(unittest.TestCase):
                 expected_name,
                 f"Channel {channel_id} should be {expected_name}"
             )
+
+
+class TestAskAi(unittest.TestCase):
+    """Test ASK_AI handler"""
+
+    @patch('automator_lambda_function.groqu')
+    @patch('automator_lambda_function.slack')
+    def test_ask_ai_with_curly_braces_in_user_message(self, mock_slack, mock_groqu):
+        """Test ASK_AI handles curly braces in user message (e.g., {POSTGRES_DB})"""
+        # Setup mocks - user message contains curly braces like environment variables
+        mock_slack.get_message.return_value = ('U123456', 'How do I set {POSTGRES_DB} in my environment?')
+        mock_groqu.ai_request.return_value = 'You can set POSTGRES_DB in your docker-compose.yml file.'
+        mock_slack.github_to_slack_markdown.return_value = 'You can set POSTGRES_DB in your docker-compose.yml file.'
+
+        # Create event
+        event = {
+            'item': {
+                'channel': 'C123456',
+                'ts': '1234567890.123456'
+            },
+            'reaction': 'ask-ai'
+        }
+
+        # Create reaction config
+        reaction_config = {
+            'type': 'ASK_AI',
+            'model': 'meta-llama/llama-4-scout-17b-16e-instruct',
+            'prompt_template': 'Answer: {user_message}',
+            'answer_template': 'Hi <@{user}>! AI says: {ai_response}'
+        }
+
+        # Execute - should not raise KeyError
+        lambda_function.handle_ask_ai(event, reaction_config)
+
+        # Verify groqu was called with escaped curly braces
+        mock_groqu.ai_request.assert_called_once()
+        call_args = mock_groqu.ai_request.call_args[0]
+        # The prompt should contain {{POSTGRES_DB}} instead of {POSTGRES_DB}
+        self.assertIn('{{POSTGRES_DB}}', call_args[0])
+
+        # Verify message was posted to thread
+        mock_slack.post_message_thread.assert_called_once()
 
 
 if __name__ == '__main__':

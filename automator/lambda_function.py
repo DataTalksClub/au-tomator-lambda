@@ -87,9 +87,11 @@ def handle_delete_message(event, reaction_config):
     if not message_details:
         logger.info(f"Message not found for {channel} {ts}")
         return
-    
+
     user = message_details.get('user')
     original_message = message_details.get('text', '')
+    # Escape curly braces in user message to avoid format string issues
+    original_message = original_message.replace('{', '{{').replace('}', '}}')
     
     # Skip if there's no user (e.g., bot message or deleted message)
     if not user:
@@ -154,6 +156,8 @@ def handle_delete_message(event, reaction_config):
 
 def handle_ask_ai(event, reaction_config):
     user, original_message = slack.get_message(event)
+    # Escape curly braces in user message to avoid format string issues
+    original_message = original_message.replace('{', '{{').replace('}', '}}')
 
     prompt = reaction_config['prompt_template'].format(user_message=original_message)
     model = reaction_config['model']
