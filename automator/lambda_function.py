@@ -172,11 +172,71 @@ def handle_ask_ai(event, reaction_config):
     slack.post_message_thread(event, message)
 
 
+def handle_repost_to_thread_and_delete(event, reaction_config):
+    """Repost the original message to the thread with a custom message, then delete from channel"""
+    item = event['item']
+    channel = item['channel']
+    ts = item['ts']
+    channel_name = get_channel_name(channel)
+    
+    # Get the original message content
+    message_details = slack.get_message_content(channel, ts)
+    if not message_details:
+        logger.info(f"Message not found for {channel} {ts}")
+        return
+    
+    user = message_details.get('user')
+    original_message = message_details.get('text', '')
+    
+    # Skip if there's no user (e.g., bot message or deleted message)
+    if not user:
+        logger.info(f"Message has no user for {channel} {ts}")
+        return
+    
+    # Escape curly braces in user message to avoid format string issues
+    original_message_escaped = original_message.replace('{', '{{').replace('}', '}}')
+    
+    # Format the thread message with placeholders
+    message_pattern = reaction_config['message']
+    
+    values = {
+        'user': user,
+        'user_message': original_message_escaped,
+        'channel': channel,
+    }
+    
+    if 'placeholders' in reaction_config:
+        thread_message = util.format_message(
+            message_pattern,
+            reaction_config['placeholders'],
+            channel_name
+        )
+        if thread_message is None:
+            logger.info(f"No placeholder matched for channel {channel_name}")
+            return
+        # Now format with user and user_message
+        thread_message = thread_message.format(**values)
+    else:
+        thread_message = message_pattern.format(**values)
+    
+    # Post the message to the thread
+    slack.post_message_thread(event, thread_message)
+    logger.info(f"Reposted message to thread for {channel} {ts}")
+    
+    # Delete the original message from the channel
+    if FAKE_DELETE:
+        logger.info(f"FAKE_DELETE for {channel} {ts}")
+    else:
+        slack.remove_message(channel, ts)
+    logger.info(f"Deleted original message from channel {channel} (kept in thread)")
+
+
 action_handlers = {
     'SLACK_POST': handle_slack_post,
     'DELETE_MESSAGE': handle_delete_message,
     'ASK_AI': handle_ask_ai,
     'REMOVE_BROADCAST': handle_remove_broadcast,
+    'REPOST_TO_THREAD_AND_DELETE': handle_repost_to_thread_and_delete,
 }
 
 

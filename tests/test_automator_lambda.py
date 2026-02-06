@@ -312,6 +312,27 @@ class TestReactionConfig(unittest.TestCase):
         self.assertEqual(reaction_config['type'], 'SLACK_POST')
         # Should not have 'types' (multiple handlers)
         self.assertNotIn('types', reaction_config)
+    
+    def test_error_log_to_thread_and_delete_reaction_exists(self):
+        """Verify that 'error-log-to-thread-and-delete' reaction is configured"""
+        reaction_config = lambda_function.reaction_configs.get('error-log-to-thread-and-delete')
+        self.assertIsNotNone(reaction_config)
+        self.assertEqual(reaction_config['type'], 'REPOST_TO_THREAD_AND_DELETE')
+        self.assertIn('message', reaction_config)
+        self.assertIn('placeholders', reaction_config)
+        # Verify the message contains expected text
+        message = reaction_config['message']
+        self.assertIn('Removing the message', message)
+        self.assertIn('original message', message.lower())
+        self.assertIn('{user_message}', message)
+    
+    def test_action_handlers_has_repost_to_thread_and_delete(self):
+        """Verify that REPOST_TO_THREAD_AND_DELETE handler is registered"""
+        self.assertIn('REPOST_TO_THREAD_AND_DELETE', lambda_function.action_handlers)
+        self.assertEqual(
+            lambda_function.action_handlers['REPOST_TO_THREAD_AND_DELETE'],
+            lambda_function.handle_repost_to_thread_and_delete
+        )
 
 
 class TestRemoveBroadcast(unittest.TestCase):
@@ -542,6 +563,176 @@ class TestAskAi(unittest.TestCase):
 
         # Verify message was posted to thread
         mock_slack.post_message_thread.assert_called_once()
+
+
+class TestRepostToThreadAndDelete(unittest.TestCase):
+    """Test REPOST_TO_THREAD_AND_DELETE handler"""
+    
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.util')
+    def test_repost_with_placeholders(self, mock_util, mock_slack):
+        """Test REPOST_TO_THREAD_AND_DELETE with channel-specific placeholders"""
+        # Setup mocks
+        mock_slack.get_message_content.return_value = {
+            'user': 'U123456',
+            'text': 'Here is my error log with lots of text'
+        }
+        mock_util.format_message.return_value = 'Removing the message. Follow <link|these recommendations>. Here\'s the original message:\n\n> {user_message}'
+        
+        # Create event
+        event = {
+            'item': {
+                'channel': 'C123456',
+                'ts': '1234567890.123456'
+            },
+            'reaction': 'error-log-to-thread-and-delete'
+        }
+        
+        # Create reaction config with placeholders
+        reaction_config = {
+            'message': 'Removing the message. Follow <{link}|these recommendations>. Here\'s the original message:\n\n> {user_message}',
+            'type': 'REPOST_TO_THREAD_AND_DELETE',
+            'placeholders': {
+                'link': {
+                    'course-ml-zoomcamp': 'https://github.com/DataTalksClub/machine-learning-zoomcamp/blob/master/asking-questions.md',
+                    'default': 'https://datatalks.club/slack/guidelines.html'
+                }
+            }
+        }
+        
+        # Execute
+        lambda_function.handle_repost_to_thread_and_delete(event, reaction_config)
+        
+        # Verify
+        mock_slack.get_message_content.assert_called_once_with('C123456', '1234567890.123456')
+        mock_slack.post_message_thread.assert_called_once()
+        # Verify the posted message contains the original message
+        posted_message = mock_slack.post_message_thread.call_args[0][1]
+        self.assertIn('Here is my error log with lots of text', posted_message)
+    
+    @patch('automator_lambda_function.slack')
+    def test_repost_without_placeholders(self, mock_slack):
+        """Test REPOST_TO_THREAD_AND_DELETE without placeholders"""
+        # Setup mocks
+        mock_slack.get_message_content.return_value = {
+            'user': 'U123456',
+            'text': 'Error message here'
+        }
+        
+        # Create event
+        event = {
+            'item': {
+                'channel': 'C123456',
+                'ts': '1234567890.123456'
+            },
+            'reaction': 'error-log-to-thread-and-delete'
+        }
+        
+        # Create reaction config without placeholders
+        reaction_config = {
+            'message': 'Removing from channel. Original message:\n\n> {user_message}',
+            'type': 'REPOST_TO_THREAD_AND_DELETE'
+        }
+        
+        # Execute
+        lambda_function.handle_repost_to_thread_and_delete(event, reaction_config)
+        
+        # Verify
+        mock_slack.post_message_thread.assert_called_once()
+        posted_message = mock_slack.post_message_thread.call_args[0][1]
+        self.assertIn('Error message here', posted_message)
+    
+    @patch('automator_lambda_function.slack')
+    def test_repost_message_not_found(self, mock_slack):
+        """Test REPOST_TO_THREAD_AND_DELETE handles missing message gracefully"""
+        # Setup mocks - message not found
+        mock_slack.get_message_content.return_value = None
+        
+        # Create event
+        event = {
+            'item': {
+                'channel': 'C123456',
+                'ts': '1234567890.123456'
+            },
+            'reaction': 'error-log-to-thread-and-delete'
+        }
+        
+        # Create reaction config
+        reaction_config = {
+            'message': 'Message: {user_message}',
+            'type': 'REPOST_TO_THREAD_AND_DELETE'
+        }
+        
+        # Execute
+        lambda_function.handle_repost_to_thread_and_delete(event, reaction_config)
+        
+        # Verify - should not post or delete when message not found
+        mock_slack.post_message_thread.assert_not_called()
+        mock_slack.remove_message.assert_not_called()
+    
+    @patch('automator_lambda_function.slack')
+    def test_repost_no_user(self, mock_slack):
+        """Test REPOST_TO_THREAD_AND_DELETE handles missing user gracefully"""
+        # Setup mocks - message without user
+        mock_slack.get_message_content.return_value = {
+            'text': 'Bot message without user'
+        }
+        
+        # Create event
+        event = {
+            'item': {
+                'channel': 'C123456',
+                'ts': '1234567890.123456'
+            },
+            'reaction': 'error-log-to-thread-and-delete'
+        }
+        
+        # Create reaction config
+        reaction_config = {
+            'message': 'Message: {user_message}',
+            'type': 'REPOST_TO_THREAD_AND_DELETE'
+        }
+        
+        # Execute
+        lambda_function.handle_repost_to_thread_and_delete(event, reaction_config)
+        
+        # Verify - should not post or delete when no user
+        mock_slack.post_message_thread.assert_not_called()
+        mock_slack.remove_message.assert_not_called()
+    
+    @patch('automator_lambda_function.slack')
+    def test_repost_with_curly_braces_in_message(self, mock_slack):
+        """Test REPOST_TO_THREAD_AND_DELETE handles curly braces in user message"""
+        # Setup mocks - message with curly braces
+        mock_slack.get_message_content.return_value = {
+            'user': 'U123456',
+            'text': 'How to configure {POSTGRES_DB} and {POSTGRES_USER}?'
+        }
+        
+        # Create event
+        event = {
+            'item': {
+                'channel': 'C123456',
+                'ts': '1234567890.123456'
+            },
+            'reaction': 'error-log-to-thread-and-delete'
+        }
+        
+        # Create reaction config
+        reaction_config = {
+            'message': 'Original: {user_message}',
+            'type': 'REPOST_TO_THREAD_AND_DELETE'
+        }
+        
+        # Execute - should not raise KeyError
+        lambda_function.handle_repost_to_thread_and_delete(event, reaction_config)
+        
+        # Verify
+        mock_slack.post_message_thread.assert_called_once()
+        posted_message = mock_slack.post_message_thread.call_args[0][1]
+        # Should contain the escaped braces
+        self.assertIn('POSTGRES_DB', posted_message)
+        self.assertIn('POSTGRES_USER', posted_message)
 
 
 if __name__ == '__main__':

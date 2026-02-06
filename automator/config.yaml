@@ -64,6 +64,26 @@ reactions:
 
       Follow <{link}|these recommendations> to make it easier to help you.
 
+  - reaction: error-log-to-thread-and-delete
+    type: REPOST_TO_THREAD_AND_DELETE
+    placeholders:
+      link:
+        course-ml-zoomcamp: https://github.com/DataTalksClub/machine-learning-zoomcamp/blob/master/asking-questions.md
+        course-data-engineering: https://github.com/DataTalksClub/data-engineering-zoomcamp/blob/main/asking-questions.md
+        course-mlops-zoomcamp: https://github.com/DataTalksClub/mlops-zoomcamp/blob/main/asking-questions.md
+        course-llm-zoomcamp: https://github.com/DataTalksClub/llm-zoomcamp/blob/main/asking-questions.md
+        default: https://datatalks.club/slack/guidelines.html#code-problems-and-errors
+    message: |
+      Removing the message from the channel to save space. Please move the error log to the thread.
+
+      Use code block for formatting the log: https://slack.com/help/articles/202288908-Format-your-messages
+
+      Follow <{link}|these recommendations> to make it easier to help you.
+
+      Here's the original message:
+
+      > {user_message}
+
   - reaction: no-screenshot
     type: SLACK_POST
     placeholders:
