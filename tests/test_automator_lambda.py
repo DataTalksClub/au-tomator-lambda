@@ -315,7 +315,7 @@ class TestReactionConfig(unittest.TestCase):
     
     def test_error_log_to_thread_and_delete_reaction_exists(self):
         """Verify that 'error-log-to-thread-and-delete' reaction is configured"""
-        reaction_config = lambda_function.reaction_configs.get('error-log-to-thread-and-delete')
+        reaction_config = lambda_function.reaction_configs.get('error-log-to-thread-please')
         self.assertIsNotNone(reaction_config)
         self.assertEqual(reaction_config['type'], 'REPOST_TO_THREAD_AND_DELETE')
         self.assertIn('message', reaction_config)
