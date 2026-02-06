@@ -65,6 +65,19 @@ def test_error_log_to_thread_please_other_channel():
     # should send a default message
 
 
+def test_error_log_to_thread_and_delete_de_zoomcamp():
+    trigger_reaction_for_channel('error-log-to-thread-and-delete', 'course-data-engineering')
+
+
+def test_error_log_to_thread_and_delete_ml_zoomcamp():
+    trigger_reaction_for_channel('error-log-to-thread-and-delete', 'course-ml-zoomcamp')
+
+
+def test_error_log_to_thread_and_delete_other_channel():
+    trigger_reaction_for_channel('error-log-to-thread-and-delete', 'general')
+    # should send a default message and delete
+
+
 def test_no_screenshot_de_zoomcamp():
     trigger_reaction_for_channel('no-screenshot', 'course-data-engineering')
 
@@ -111,6 +124,9 @@ def run():
     # test_error_log_to_thread_please_de_zoomcamp()
     # test_error_log_to_thread_please_ml_zoomcamp()
     # test_error_log_to_thread_please_other_channel()
+    # test_error_log_to_thread_and_delete_de_zoomcamp()
+    # test_error_log_to_thread_and_delete_ml_zoomcamp()
+    # test_error_log_to_thread_and_delete_other_channel()
     # test_no_screenshot_de_zoomcamp()
     # test_no_screenshot_other_channel()
     # test_shameless_rules()
