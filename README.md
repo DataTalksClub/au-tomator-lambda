@@ -1,27 +1,74 @@
-It has three components:
+# AuTomator
 
-* router - decides if it needs to invoke other functions based on event type
-* automator - the main logic for handling reactions
-* moderator - monitors message rates and alerts admin when thresholds are exceeded
+A Slack moderation bot that runs on AWS Lambda. It lets you moderate from your phone—no laptop, no scanning every channel manually. I built it in June 2022 and have kept adding features as new needs came up.
 
-The router and automator are split into two parts to work around Slack's 3 second timeout.
+## How the AuTomator Works
+
+The backend is split into **three Lambdas**, each with a clear responsibility.
+
+### 1. Router — Routes Slack events to the right Lambda
+
+Everything from Slack goes through the router: messages, emoji reactions, and button clicks.
+
+Its only job is to look at the incoming event and quickly decide where it should go next:
+
+| Event | Routed to |
+|-------|-----------|
+| **Reaction added by admin** | Automator |
+| **Message event** | Moderator |
+| **Button click** (e.g. from an alert) | Moderator |
+
+The router and automator are separate on purpose: Slack expects a response within about 3 seconds. The router responds immediately and invokes the automator (or moderator) asynchronously, so longer work doesn’t time out.
+
+### 2. Automator — Acts based on emoji reactions by the admin
+
+This is for fast reaction on spam and other rule violations.
+
+- The bot has a list of **specified emojis** and the **actions** that go with each.
+- When you react to any message with one of those emojis, the automator looks up the action and runs it. Actions can be:
+  - **Posting a reply** in the thread (e.g. FAQ link, “use threads” reminder).
+  - **Deleting the message** and sending a DM to the author explaining why (e.g. rule violation).
+  - **Asking an AI** to generate an answer and posting it in the thread (e.g. `:ask-ai:`).
+
+Examples:
+
+- **:ask-ai:** — Automator replies in the thread with an AI-generated answer.
+- **:rule-book:** (or similar) — Automator deletes the message and DMs the author that it violated community rules and was deleted.
+
+The automator can also send a relevant reply to the author of the message you reacted to, so they get clear feedback.
+
+### 3. Moderator — Watches message activity and helps you react quickly
+
+The moderator **does not** decide what is spam by itself. It:
+
+- Keeps track of how often people post (e.g. messages per user in a time window).
+- Notices patterns like “too many messages too quickly.”
+- When that happens, **alerts an admin** and provides **buttons** to act immediately.
+
+Those buttons let you **delete recent messages**, **deactivate a user**, or **ignore** the alert—all from Slack, including on your phone. So you get early signals and can intervene quickly without opening a laptop.
+
+For more on the moderator (DynamoDB, thresholds, LocalStack, etc.), see [moderator/README.md](moderator/README.md).
+
+---
 
 ## Deployment
 
-First, deploy the router:
+Deploy in this order:
+
+**1. Router**
 
 ```bash
 cd router
 bash publish.sh
 ```
 
-Next, deploy the automator:
+**2. Automator**
 
 ```bash
 make deploy
 ```
 
-Finally, deploy the moderator:
+**3. Moderator**
 
 ```bash
 cd moderator
@@ -29,41 +76,36 @@ bash package.sh
 bash deploy.sh
 ```
 
-## Message Moderator
+---
 
-The moderator lambda monitors message rates and alerts administrators when users exceed configured thresholds. See [moderator/README.md](moderator/README.md) for detailed documentation.
+## Message Moderator (reference)
 
-**Key Features:**
-- Tracks messages per user using DynamoDB
-- Configurable threshold (default: 5 messages in 3 minutes)
-- Interactive admin alerts with action buttons
-- Bulk message deletion
-- User deactivation capability
-- LocalStack support for testing
+- Tracks messages per user using **DynamoDB**.
+- Configurable threshold (default: 5 messages in 3 minutes).
+- Interactive admin alerts with action buttons.
+- Bulk message deletion and user deactivation.
+- LocalStack support for testing.
+
+See [moderator/README.md](moderator/README.md) and [moderator/SLACK_SETUP.md](moderator/SLACK_SETUP.md) for setup and details.
+
+---
 
 ## Application Configuration
 
-This README provides an overview of the configuration file for our application, which manages various aspects of our Slack workspace and automated responses.
-
-
-The configuration file is structured in YAML format and consists of the following main sections:
-
-1. Admins
-2. Channels
-3. Reactions
+Behavior is driven by **`automator/config.yaml`**, which is in YAML and has three main sections.
 
 ### 1. Admins
 
-This section lists the user IDs of administrators who have special privileges within the application.
+Slack user IDs of people who can trigger reaction-based actions (e.g. who can use the automator emojis).
 
 ```yaml
 admins:
-    - U01AXE0P5M3
+  - U01AXE0P5M3
 ```
 
 ### 2. Channels
 
-This section maps channel IDs to their corresponding names. It helps identify specific channels for various operations.
+Maps Slack channel IDs to human-readable names (used for channel-specific messages and placeholders).
 
 ```yaml
 channels:
@@ -72,110 +114,56 @@ channels:
   C0288NJ5XSA: "course-ml-zoomcamp"
   C06TEGTGM3J: "course-llm-zoomcamp"
 ```
+
 ### 3. Reactions
 
-This section defines automated responses to specific reactions or triggers in the Slack workspace. Each reaction has a type (or types for multiple handlers), corresponding action, and may include placeholders.
+Each entry defines an emoji (reaction name) and what the automator should do when an admin uses it.
 
-#### Reaction Types:
+- **Reaction** — The emoji/short name (e.g. `thread`, `faq`, `ask-ai`).
+- **Type (or types)** — The kind of action; you can list multiple and they run in sequence.
+- **Message / placeholders** — Text to post or send in DMs, with optional placeholders.
 
-1. `SLACK_POST`: Posts a message in the Slack channel
-2. `DELETE_MESSAGE`: Removes a message and sends a notification to the user
-3. `ASK_AI`: Utilizes an AI model to generate a response
-4. `REMOVE_BROADCAST`: Removes a broadcasted thread reply from the channel (keeps it in the thread)
-5. `REPOST_TO_THREAD_AND_DELETE`: Reposts the original message to the thread with a custom message, then deletes it from the channel
+#### Reaction types
 
-#### Multiple Handlers:
+| Type | What it does |
+|------|------------------|
+| `SLACK_POST` | Posts a message in the thread (e.g. reminder, link). |
+| `DELETE_MESSAGE` | Deletes the message and sends a DM to the author (e.g. rule violation). |
+| `ASK_AI` | Calls an AI model, then posts the reply in the thread. |
+| `REMOVE_BROADCAST` | Removes a “also sent to channel” thread reply from the channel (keeps it in the thread). |
+| `REPOST_TO_THREAD_AND_DELETE` | Reposts the message to the thread with a custom message, then deletes it from the channel. |
 
-Reactions can have multiple handlers that execute in sequence. Use `types` (list) instead of `type` (single) to define multiple handlers:
+#### Multiple handlers
+
+Use `types` (a list) to run several actions for one reaction:
 
 ```yaml
 - reaction: thread
   types:
-    - REMOVE_BROADCAST  # First: remove if broadcasted
-    - SLACK_POST        # Then: post reminder message
+    - REMOVE_BROADCAST   # First: remove if broadcasted
+    - SLACK_POST        # Then: post reminder
   message: "Please use threads..."
 ```
 
-#### Pre-defined Placeholders:
+#### Placeholders
 
-- `{user}`: Replaced with the username of the person who triggered the reaction
-- `{channel}`: Replaced with the channel name where the reaction was triggered
-- `{user_message}`: Replaced with the content of the user's message that triggered the reaction
+- **Pre-defined:** `{user}`, `{channel}`, `{user_message}` (author, channel, message text).
+- **Custom:** e.g. `{link}` — defined under `placeholders` per reaction, often with channel-specific or `default` values.
 
-#### Custom Placeholders:
+If a placeholder is channel-specific and the channel isn’t in the map, the `default` value is used when set; otherwise that reaction is skipped for that channel.
 
-Some reactions use custom placeholders, such as `{link}` in the `faq` reaction. These are defined in the `placeholders` section of each reaction.
+#### Example reactions (from config)
 
-#### Default Placeholder Behavior:
+| Reaction | Type | Purpose |
+|----------|------|---------|
+| `dont-ask-to-ask-just-ask` | SLACK_POST | Encourage asking questions directly. |
+| `thread` | REMOVE_BROADCAST + SLACK_POST | Remove broadcasted reply, post thread reminder. |
+| `faq` | SLACK_POST | Post channel-specific FAQ link. |
+| `error-log-to-thread-please` | SLACK_POST | How to share error logs. |
+| `error-log-to-thread-and-delete` | REPOST_TO_THREAD_AND_DELETE | Move error log to thread, delete from channel. |
+| `no-screenshot` | SLACK_POST | Advise against code screenshots; link to guidelines. |
+| `shameless-rules` | DELETE_MESSAGE | Enforce shameless-promo rules; DM author. |
+| `jobs-rules` | DELETE_MESSAGE | Enforce job-posting rules; DM author. |
+| `ask-ai` | ASK_AI | Generate and post an AI reply in the thread. |
 
-For reactions with channel-specific placeholders (like `{link}` in the `faq` reaction):
-
-- If a matching channel is found, the corresponding value is used.
-- If no matching channel is found, but a `default` value is set, the default value is used.
-- If no matching channel is found and no default value is set, no action is taken.
-
-#### Detailed Reaction Descriptions:
-
-1. `dont-ask-to-ask-just-ask`:
-   - Type: `SLACK_POST`
-   - Action: Posts a message encouraging users to ask their questions directly
-
-2. `thread`:
-   - Types: `REMOVE_BROADCAST`, `SLACK_POST` (multiple handlers)
-   - Actions: 
-     1. `REMOVE_BROADCAST`: If the message is a thread reply that was "also sent to channel" (broadcasted), removes it from the channel view (keeps it in the thread)
-     2. `SLACK_POST`: Posts a reminder message about using threads
-   - Note: This demonstrates the ability to use multiple handlers for a single reaction
-
-3. `faq`:
-   - Type: `SLACK_POST`
-   - Action: Provides links to course-specific FAQs
-   - Placeholders: 
-     - `{link}`: Channel-specific FAQ links
-   - Default behavior: Uses a default link if the channel doesn't match
-
-4. `error-log-to-thread-please`:
-   - Type: `SLACK_POST`
-   - Action: Instructs users on how to properly share error logs
-   - Placeholders:
-     - `{link}`: Channel-specific guidelines for sharing error logs
-   - Default behavior: Uses a default link if the channel doesn't match
-
-4a. `error-log-to-thread-and-delete`:
-   - Type: `REPOST_TO_THREAD_AND_DELETE`
-   - Action: Reposts the original message to the thread with instructions, then deletes it from the channel to save space
-   - Placeholders:
-     - `{link}`: Channel-specific guidelines for sharing error logs
-     - `{user_message}`: The original message content
-   - Default behavior: Uses a default link if the channel doesn't match
-   - Note: This is an enhanced version of `error-log-to-thread-please` that also removes the message from the channel
-
-5. `no-screenshot`:
-   - Type: `SLACK_POST`
-   - Action: Advises against posting screenshots of code
-   - Placeholders:
-     - `{link}`: Channel-specific guidelines for sharing code
-   - Default behavior: Uses a default link if the channel doesn't match
-
-6. `shameless-rules`:
-   - Type: `DELETE_MESSAGE`
-   - Action: Enforces rules for shameless promotion channels
-   - Uses pre-defined placeholders: `{user}`, `{channel}`, `{user_message}`
-
-7. `jobs-rules`:
-   - Type: `DELETE_MESSAGE`
-   - Action: Enforces rules for job postings
-   - Uses pre-defined placeholders: `{user}`, `{channel}`, `{user_message}`
-
-8. `ask-ai`:
-   - Type: `ASK_AI`
-   - Action: Utilizes an AI model (`llama3-70b-8192`) to answer user questions
-   - Model: `llama3-70b-8192`
-   - Prompt template: Includes the user's message
-   - Answer template: Formats the AI's response for posting in Slack
-
-## Usage
-
-This configuration file is used by the application to manage automated responses and actions within the Slack workspace. It helps maintain community guidelines, provides helpful resources, and ensures a smooth experience for all users in the various course-related channels.
-
-To modify the configuration, edit the YAML file directly. Ensure that you follow the existing structure and formatting to maintain compatibility with the application.
+To change behavior, edit `automator/config.yaml` and keep the same structure so the application stays compatible.
