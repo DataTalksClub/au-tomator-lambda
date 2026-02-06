@@ -585,7 +585,7 @@ class TestRepostToThreadAndDelete(unittest.TestCase):
                 'channel': 'C123456',
                 'ts': '1234567890.123456'
             },
-            'reaction': 'error-log-to-thread-and-delete'
+            'reaction': 'error-log-to-thread-please'
         }
         
         # Create reaction config with placeholders
