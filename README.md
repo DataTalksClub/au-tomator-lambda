@@ -82,6 +82,7 @@ This section defines automated responses to specific reactions or triggers in th
 2. `DELETE_MESSAGE`: Removes a message and sends a notification to the user
 3. `ASK_AI`: Utilizes an AI model to generate a response
 4. `REMOVE_BROADCAST`: Removes a broadcasted thread reply from the channel (keeps it in the thread)
+5. `REPOST_TO_THREAD_AND_DELETE`: Reposts the original message to the thread with a custom message, then deletes it from the channel
 
 #### Multiple Handlers:
 
@@ -139,6 +140,15 @@ For reactions with channel-specific placeholders (like `{link}` in the `faq` rea
    - Placeholders:
      - `{link}`: Channel-specific guidelines for sharing error logs
    - Default behavior: Uses a default link if the channel doesn't match
+
+4a. `error-log-to-thread-and-delete`:
+   - Type: `REPOST_TO_THREAD_AND_DELETE`
+   - Action: Reposts the original message to the thread with instructions, then deletes it from the channel to save space
+   - Placeholders:
+     - `{link}`: Channel-specific guidelines for sharing error logs
+     - `{user_message}`: The original message content
+   - Default behavior: Uses a default link if the channel doesn't match
+   - Note: This is an enhanced version of `error-log-to-thread-please` that also removes the message from the channel
 
 5. `no-screenshot`:
    - Type: `SLACK_POST`
