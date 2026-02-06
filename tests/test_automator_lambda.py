@@ -577,7 +577,7 @@ class TestRepostToThreadAndDelete(unittest.TestCase):
             'user': 'U123456',
             'text': 'Here is my error log with lots of text'
         }
-        mock_util.format_message.return_value = 'Removing the message. Follow <link|these recommendations>. Here\'s the original message:\n\n> {user_message}'
+        mock_util.format_message.return_value = "Removing the message. Follow <link|these recommendations>. Here's the original message:\n\n> {user_message}"
         
         # Create event
         event = {
@@ -590,7 +590,7 @@ class TestRepostToThreadAndDelete(unittest.TestCase):
         
         # Create reaction config with placeholders
         reaction_config = {
-            'message': 'Removing the message. Follow <{link}|these recommendations>. Here\'s the original message:\n\n> {user_message}',
+            'message': "Removing the message. Follow <{link}|these recommendations>. Here's the original message:\n\n> {user_message}",
             'type': 'REPOST_TO_THREAD_AND_DELETE',
             'placeholders': {
                 'link': {
@@ -733,6 +733,46 @@ class TestRepostToThreadAndDelete(unittest.TestCase):
         # Should contain the escaped braces
         self.assertIn('POSTGRES_DB', posted_message)
         self.assertIn('POSTGRES_USER', posted_message)
+    
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.util')
+    def test_repost_placeholder_returns_none(self, mock_util, mock_slack):
+        """Test REPOST_TO_THREAD_AND_DELETE handles placeholder matching failure gracefully"""
+        # Setup mocks
+        mock_slack.get_message_content.return_value = {
+            'user': 'U123456',
+            'text': 'Error message'
+        }
+        # util.format_message returns None when no placeholder matches and no default
+        mock_util.format_message.return_value = None
+        
+        # Create event
+        event = {
+            'item': {
+                'channel': 'C123456',
+                'ts': '1234567890.123456'
+            },
+            'reaction': 'error-log-to-thread-and-delete'
+        }
+        
+        # Create reaction config with placeholders but no default
+        reaction_config = {
+            'message': 'Message with {link}',
+            'type': 'REPOST_TO_THREAD_AND_DELETE',
+            'placeholders': {
+                'link': {
+                    'course-ml-zoomcamp': 'https://example.com'
+                    # No default value
+                }
+            }
+        }
+        
+        # Execute
+        lambda_function.handle_repost_to_thread_and_delete(event, reaction_config)
+        
+        # Verify - should not post or delete when placeholder matching fails
+        mock_slack.post_message_thread.assert_not_called()
+        mock_slack.remove_message.assert_not_called()
 
 
 if __name__ == '__main__':
