@@ -595,7 +595,7 @@ class TestRepostToThreadAndDelete(unittest.TestCase):
             'placeholders': {
                 'link': {
                     'course-ml-zoomcamp': 'https://github.com/DataTalksClub/machine-learning-zoomcamp/blob/master/asking-questions.md',
-                    'default': 'https://datatalks.club/slack/guidelines.html'
+                    'default': 'https://datatalks.club/docs/general/guidelines/asking-for-help/'
                 }
             }
         }

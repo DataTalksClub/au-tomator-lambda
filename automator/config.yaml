@@ -18,7 +18,7 @@ reactions:
     type: SLACK_POST
     message: >
       Please use threads to keep the discussion more organized:
-      https://datatalks.club/slack/guidelines.html#taking-part-in-discussions
+      https://datatalks.club/docs/general/guidelines/discussions/
 
   - reaction: thread-please
     type: DELETE_MESSAGE
@@ -31,7 +31,7 @@ reactions:
 
       Please don't use the "Also send to channel" (broadcast) functionality when replying in threads. This is against our community guidelines:
 
-      https://datatalks.club/slack/guidelines.html#taking-part-in-discussions
+      https://datatalks.club/docs/general/guidelines/discussions/
 
       Your message was removed from the channel. Feel free to repost it in the thread without using the broadcast functionality.
 
@@ -56,7 +56,7 @@ reactions:
         course-data-engineering: https://github.com/DataTalksClub/data-engineering-zoomcamp/blob/main/asking-questions.md
         course-mlops-zoomcamp: https://github.com/DataTalksClub/mlops-zoomcamp/blob/main/asking-questions.md
         course-llm-zoomcamp: https://github.com/DataTalksClub/llm-zoomcamp/blob/main/asking-questions.md
-        default: https://datatalks.club/slack/guidelines.html#code-problems-and-errors
+        default: https://datatalks.club/docs/general/guidelines/asking-for-help/
     message: |
       Removing the message from the channel to save space. Please move the error log to the thread.
 
@@ -76,7 +76,7 @@ reactions:
         course-data-engineering: https://github.com/DataTalksClub/data-engineering-zoomcamp/blob/main/asking-questions.md
         course-mlops-zoomcamp: https://github.com/DataTalksClub/mlops-zoomcamp/blob/main/asking-questions.md
         course-llm-zoomcamp: https://github.com/DataTalksClub/llm-zoomcamp/blob/main/asking-questions.md
-        default: https://datatalks.club/slack/guidelines.html#code-problems-and-errors
+        default: https://datatalks.club/docs/general/guidelines/asking-for-help/
     message: |
       Please don't post screenshots or pictures of your code, they are very difficult to read.
 
@@ -95,7 +95,7 @@ reactions:
 
       We want to make this community useful for everyone, that's why we ask you to follow the "shameless channels" template and the rules:
 
-      https://alexeygrigorev.notion.site/Shameless-promotion-rules-f565ac6aa2064f7190382f2ffd82c876
+      https://datatalks.club/docs/general/guidelines/promotion/
 
       Your post was removed from the channel. Please adjust your post.
 
@@ -120,7 +120,7 @@ reactions:
 
       We want to make this community useful for everyone, that's why we ask you to follow the templates and the rules suggested here:
 
-      https://alexeygrigorev.notion.site/Jobs-b6ab78b9af504c8dac86413e7404fcfb
+      https://datatalks.club/docs/general/jobs/rules/
 
       Your post was removed from the channel. You're free to make adjustments and post again.
 
@@ -199,7 +199,7 @@ reactions:
 
       Your message was removed from the channel because it was either double posting or violating some of the community guidelines:
 
-      https://datatalks.club/slack/guidelines.html
+      https://datatalks.club/docs/general/guidelines/
 
       Apologies for the inconvenience. Thank you!
     thread_message: |
@@ -207,7 +207,7 @@ reactions:
 
       Your message in <#{channel}> was removed because the parent message was deleted for violating community guidelines:
 
-      https://datatalks.club/slack/guidelines.html
+      https://datatalks.club/docs/general/guidelines/
 
       Apologies for the inconvenience. Thank you!
 
