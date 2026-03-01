@@ -198,26 +198,28 @@ def handle_repost_to_thread_and_delete(event, reaction_config):
     
     # Format the thread message with placeholders
     message_pattern = reaction_config['message']
-    
+
     values = {
         'user': user,
         'user_message': original_message_escaped,
         'channel': channel,
     }
-    
+
     if 'placeholders' in reaction_config:
-        thread_message = util.format_message(
-            message_pattern,
+        # Resolve channel-specific placeholders (e.g., link for the channel)
+        resolved_placeholders = util.prepare_values(
             reaction_config['placeholders'],
             channel_name
         )
-        if thread_message is None:
+        if resolved_placeholders is None:
             logger.info(f"No placeholder matched for channel {channel_name}")
             return
-        # Now format with user and user_message
-        thread_message = thread_message.format(**values)
-    else:
-        thread_message = message_pattern.format(**values)
+        # Merge with values
+        values.update(resolved_placeholders)
+
+    # Format the message with all placeholders
+    thread_message = util.handle_qoutes(message_pattern, values)
+    thread_message = thread_message.format(**values)
     
     # Post the message to the thread
     slack.post_message_thread(event, thread_message)

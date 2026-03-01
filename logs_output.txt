@@ -1,0 +1,102 @@
+INIT_START Runtime Version: python:3.12.mainlinev2.v3	Runtime Version ARN: arn:aws:lambda:eu-west-1::runtime:27990c3d0965bea97240f3380b8d623b692705303bbde4c31fb02fa7daa05453
+
+START RequestId: 3836ec54-a38c-4832-80c9-972baa74f59e Version: $LATEST
+
+{"token": "uURN4G72mcTUEu4NNlJ0RAqA", "team_id": "T01ATQK62F8", "context_team_id": "T01ATQK62F8", "context_enterprise_id": null, "api_app_id": "A01S395330A", "event": {"type": "reaction_added", "user": "U01AXE0P5M3", "reaction": "shameless-rules", "item": {"type": "message", "channel": "C02N6N3S1FV", "ts": "1772232859.448849"}, "item_user": "U09VDBDM3ND", "event_ts": "1772285948.017500"}, "type": "event_callback", "event_id": "Ev0AHK8ACWAX", "event_time": 1772285948, "authorizations": [{"enterprise_id": null, "team_id": "T01ATQK62F8", "user_id": "U01AXE0P5M3", "is_bot": false, "is_enterprise_install": false}], "is_ext_shared_channel": false, "event_context": "4-eyJldCI6InJlYWN0aW9uX2FkZGVkIiwidGlkIjoiVDAxQVRRSzYyRjgiLCJhaWQiOiJBMDFTMzk1MzMwQSIsImNpZCI6IkMwMk42TjNTMUZWIn0"}
+
+reaction: shameless-rules
+
+posting Hi <@U09VDBDM3ND>!   You created this message in <#C02N6N3S1FV>:  >If you’ve ever worked with data long enough, you’ll realize something very quickly: >Data doesn’t come in “clean tables,” it comes in chaos.  > >As a Data Engineer, I’ve learned that data behaves a lot like people at a wedding: >* Everyone shows up uninvited. >* Nobody sits where they’re supposed to. >* Some people come with plus ones you didn’t plan for. >* And somehow, you’re expected to make everything look organized before the important guests arrive. > >That, in simple terms, is the difference between a DATA LAKE and a DATA WAREHOUSE. > >Read Here <https://www.linkedin.com/posts/daniel-igwe-781850283_if-youve-ever-worked-with-data-long-enough-activity-7432538659138035712-uHuw|https://www.linkedin.com/posts/daniel-igwe-781850283_if-youve-ever-worked-with-data-long-enough-activity-7432538659138035712-uHuw>  We want to make this community useful for everyone, that's why we ask you to follow the "shameless channels" template and the rules:  https://datatalks.club/docs/general/guidelines/promotion/  Your post was removed from the channel. Please adjust your post.  Apologies for the inconvenience. Thank you!  to U09VDBDM3ND...
+
+removing message from C02N6N3S1FV at 1772232859.448849...
+
+END RequestId: 3836ec54-a38c-4832-80c9-972baa74f59e
+
+REPORT RequestId: 3836ec54-a38c-4832-80c9-972baa74f59e	Duration: 1470.84 ms	Billed Duration: 1889 ms	Memory Size: 128 MB	Max Memory Used: 63 MB	Init Duration: 417.73 ms	
+
+START RequestId: 2f42a77a-dd6a-49ee-be51-d67f1630e09f Version: $LATEST
+
+{"token": "uURN4G72mcTUEu4NNlJ0RAqA", "team_id": "T01ATQK62F8", "context_team_id": "T01ATQK62F8", "context_enterprise_id": null, "api_app_id": "A01S395330A", "event": {"type": "reaction_added", "user": "U01AXE0P5M3", "reaction": "shameless-rules", "item": {"type": "message", "channel": "C02MS2K0ACF", "ts": "1772274689.488669"}, "item_user": "U0AH2SB6WAY", "event_ts": "1772285960.015900"}, "type": "event_callback", "event_id": "Ev0AHK8B1KL3", "event_time": 1772285960, "authorizations": [{"enterprise_id": null, "team_id": "T01ATQK62F8", "user_id": "U01AXE0P5M3", "is_bot": false, "is_enterprise_install": false}], "is_ext_shared_channel": false, "event_context": "4-eyJldCI6InJlYWN0aW9uX2FkZGVkIiwidGlkIjoiVDAxQVRRSzYyRjgiLCJhaWQiOiJBMDFTMzk1MzMwQSIsImNpZCI6IkMwMk1TMkswQUNGIn0"}
+
+reaction: shameless-rules
+
+posting Hi <@U0AH2SB6WAY>!   You created this message in <#C02MS2K0ACF>:  >*THE INFRASTRUCTURE TAX: WHY YOUR DATA PLATFORM COSTS ARE EXPLODING* >Your cloud bill shouldn't outpace your business growth. As we enter 2026, many data leaders face exploding costs from scaling data volumes. The culprit: The Infrastructure Tax. >:octagonal_sign: *WHY SO EXPENSIVE?* Four hidden taxes: >1. *Query Tax*: Premium compute for rarely queried data in BigQuery, Redshift, or Snowflake. >2. *Ops Tax*: Engineers waste ~40% time on Kafka cluster maintenance, stifling innovation. >3. *Transport Tax*: Data shuffling (Lake → Stream → Warehouse) racks up egress fees and latency. >4. *Debt Tax*: Fragmented stacks lead to costly debugging from schema changes and failures. >:white_check_mark: *THE LAKEHOUSE SHIFT* >Speed shouldn't bankrupt you. Top teams are consolidating into Data Lakehouses for lean ops. >How it cuts costs: >• :no_entry_sign: No transfer fees: Store in open formats (Iceberg, Delta, Hudi) on object storage; analyze in place. >• :lock: Unified security: Centralize governance to slash overhead. >• :zap: Decoupled compute: Pay only for active queries, ditch always-on costs. >• :shield: ACID reliability: Warehouse quality at lake prices. >Goal: Stop unnecessary data movement; pay for value, not velocity. >Curious: Are your infra costs exceeding data value? Planning Lakehouse to cut the Tax by 2026? >*DISCUSS BELOW OR VISIT:* <https://lnkd.in/gjexMMCj> >#DataLakehouse #DataEngineering #CloudCosts #BigQuery #Redshift #Kafka #FinOps #DataArchitecture #RealTimeData #DataSecurity #Dataverses  We want to make this community useful for everyone, that's why we ask you to follow the "shameless channels" template and the rules:  https://datatalks.club/docs/general/guidelines/promotion/  Your post was removed from the channel. Please adjust your post.  Apologies for the inconvenience. Thank you!  to U0AH2SB6WAY...
+
+removing message from C02MS2K0ACF at 1772274689.488669...
+
+END RequestId: 2f42a77a-dd6a-49ee-be51-d67f1630e09f
+
+REPORT RequestId: 2f42a77a-dd6a-49ee-be51-d67f1630e09f	Duration: 1288.66 ms	Billed Duration: 1289 ms	Memory Size: 128 MB	Max Memory Used: 63 MB	
+
+START RequestId: 2ad89ef0-469a-4175-9242-49c6707baea7 Version: $LATEST
+
+{"token": "uURN4G72mcTUEu4NNlJ0RAqA", "team_id": "T01ATQK62F8", "context_team_id": "T01ATQK62F8", "context_enterprise_id": null, "api_app_id": "A01S395330A", "event": {"type": "reaction_added", "user": "U01AXE0P5M3", "reaction": "shameless-rules", "item": {"type": "message", "channel": "C02MS2K0ACF", "ts": "1772232701.777009"}, "item_user": "U09VDBDM3ND", "event_ts": "1772285964.016100"}, "type": "event_callback", "event_id": "Ev0AJ4HG8ATT", "event_time": 1772285964, "authorizations": [{"enterprise_id": null, "team_id": "T01ATQK62F8", "user_id": "U01AXE0P5M3", "is_bot": false, "is_enterprise_install": false}], "is_ext_shared_channel": false, "event_context": "4-eyJldCI6InJlYWN0aW9uX2FkZGVkIiwidGlkIjoiVDAxQVRRSzYyRjgiLCJhaWQiOiJBMDFTMzk1MzMwQSIsImNpZCI6IkMwMk1TMkswQUNGIn0"}
+
+reaction: shameless-rules
+
+posting Hi <@U09VDBDM3ND>!   You created this message in <#C02MS2K0ACF>:  >If you’ve ever worked with data long enough, you’ll realize something very quickly: >Data doesn’t come in “clean tables,” it comes in chaos.  > >As a Data Engineer, I’ve learned that data behaves a lot like people at a wedding: >* Everyone shows up uninvited. >* Nobody sits where they’re supposed to. >* Some people come with plus ones you didn’t plan for. >* And somehow, you’re expected to make everything look organized before the important guests arrive. > >That, in simple terms, is the difference between a DATA LAKE and a DATA WAREHOUSE. > ><https://www.linkedin.com/posts/daniel-igwe-781850283_if-youve-ever-worked-with-data-long-enough-activity-7432538659138035712-uHuw|https://www.linkedin.com/posts/daniel-igwe-781850283_if-youve-ever-worked-with-data-long-enough-activity-7432538659138035712-uHuw>  We want to make this community useful for everyone, that's why we ask you to follow the "shameless channels" template and the rules:  https://datatalks.club/docs/general/guidelines/promotion/  Your post was removed from the channel. Please adjust your post.  Apologies for the inconvenience. Thank you!  to U09VDBDM3ND...
+
+removing message from C02MS2K0ACF at 1772232701.777009...
+
+END RequestId: 2ad89ef0-469a-4175-9242-49c6707baea7
+
+REPORT RequestId: 2ad89ef0-469a-4175-9242-49c6707baea7	Duration: 1219.29 ms	Billed Duration: 1220 ms	Memory Size: 128 MB	Max Memory Used: 63 MB	
+
+INIT_START Runtime Version: python:3.12.mainlinev2.v3	Runtime Version ARN: arn:aws:lambda:eu-west-1::runtime:27990c3d0965bea97240f3380b8d623b692705303bbde4c31fb02fa7daa05453
+
+START RequestId: 17a93748-26ff-441f-bd18-a620ddcb6cfc Version: $LATEST
+
+{"token": "uURN4G72mcTUEu4NNlJ0RAqA", "team_id": "T01ATQK62F8", "context_team_id": "T01ATQK62F8", "context_enterprise_id": null, "api_app_id": "A01S395330A", "event": {"type": "reaction_added", "user": "U01AXE0P5M3", "reaction": "shameless-rules", "item": {"type": "message", "channel": "C02N6N3S1FV", "ts": "1772294443.191179"}, "item_user": "U0AHHMBV5PD", "event_ts": "1772294453.018300"}, "type": "event_callback", "event_id": "Ev0AHRUUSYSE", "event_time": 1772294453, "authorizations": [{"enterprise_id": null, "team_id": "T01ATQK62F8", "user_id": "U01AXE0P5M3", "is_bot": false, "is_enterprise_install": false}], "is_ext_shared_channel": false, "event_context": "4-eyJldCI6InJlYWN0aW9uX2FkZGVkIiwidGlkIjoiVDAxQVRRSzYyRjgiLCJhaWQiOiJBMDFTMzk1MzMwQSIsImNpZCI6IkMwMk42TjNTMUZWIn0"}
+
+reaction: shameless-rules
+
+posting Hi <@U0AHHMBV5PD>!   You created this message in <#C02N6N3S1FV>:  >*Claude Code for Analytics* > >*Who is it for -* Anyone who wants to use AI to build high quality analytics reports, projects and data pipelines > >*Why is it relevant -*  >I've been using Claude Code for analytics daily and I mostly end up running into the same problems - SQL that doesn't follow house conventions, context windows that fill up before the real work starts, inconsistent metric calculations and hallucinated table names. > >So I've built a complete Claude Code configuration for Claude to really help you conduct high quality analyses. > >• *It learns your data model -* Paste your top 5 SQL queries in the first session. Claude reverse-engineers your schema - tables, joins, naming conventions, metric definitions, date patterns. Every subsequent interaction adds to what it knows. The knowledge compounds across sessions. >• *Specialized agents keep context efficient -* Six purpose-built agents - analyst, data explorer, dbt pipeline builder, SQL developer, onboarder, reviewer - each with its own context window. Exploring a 200-table schema doesn't eat into your analysis context budget. The main claude agent orchestrates delegation automatically. >• *Guardrails run automatically -* Hooks block destructive SQL, auto-format every SQL file, and log every query. Rules for SQL conventions, metric definitions, and data privacy auto-apply by file type. >Also includes 10 skills (EDA, A/B testing, SQL optimization, and more), MCP templates for Postgres, Snowflake, etc, and a setup script that scaffolds everything in under a minute. > >Repo - <https://github.com/adityawrk/analytics-with-claude-code>  We want to make this community useful for everyone, that's why we ask you to follow the "shameless channels" template and the rules:  https://datatalks.club/docs/general/guidelines/promotion/  Your post was removed from the channel. Please adjust your post.  Apologies for the inconvenience. Thank you!  to U0AHHMBV5PD...
+
+removing message from C02N6N3S1FV at 1772294443.191179...
+
+END RequestId: 17a93748-26ff-441f-bd18-a620ddcb6cfc
+
+REPORT RequestId: 17a93748-26ff-441f-bd18-a620ddcb6cfc	Duration: 1494.64 ms	Billed Duration: 1888 ms	Memory Size: 128 MB	Max Memory Used: 63 MB	Init Duration: 393.22 ms	
+
+INIT_START Runtime Version: python:3.12.mainlinev2.v3	Runtime Version ARN: arn:aws:lambda:eu-west-1::runtime:27990c3d0965bea97240f3380b8d623b692705303bbde4c31fb02fa7daa05453
+
+START RequestId: 692d24a4-f35a-40e4-a9ec-8e0babd5a29d Version: $LATEST
+
+{"token": "uURN4G72mcTUEu4NNlJ0RAqA", "team_id": "T01ATQK62F8", "context_team_id": "T01ATQK62F8", "context_enterprise_id": null, "api_app_id": "A01S395330A", "event": {"type": "reaction_added", "user": "U01AXE0P5M3", "reaction": "shameless-rules", "item": {"type": "message", "channel": "C02N6N3S1FV", "ts": "1772303830.492279"}, "item_user": "U06G4M3KH4J", "event_ts": "1772308520.019600"}, "type": "event_callback", "event_id": "Ev0AHB0RTV9V", "event_time": 1772308520, "authorizations": [{"enterprise_id": null, "team_id": "T01ATQK62F8", "user_id": "U01AXE0P5M3", "is_bot": false, "is_enterprise_install": false}], "is_ext_shared_channel": false, "event_context": "4-eyJldCI6InJlYWN0aW9uX2FkZGVkIiwidGlkIjoiVDAxQVRRSzYyRjgiLCJhaWQiOiJBMDFTMzk1MzMwQSIsImNpZCI6IkMwMk42TjNTMUZWIn0"}
+
+reaction: shameless-rules
+
+posting Hi <@U06G4M3KH4J>!   You created this message in <#C02N6N3S1FV>:  >What is it: AWS GenAI eBook: optimal foundation models :books: >Who is for: developers, engineers, tech leaders >Why is it relevant: >Ongoing use of model evaluation tools can help organizations quickly select, evaluate, and refine their model for rapid deployment and ongoing optimization. >This eBook focuses on how AWS partners provide evaluation solutions to help businesses accelerate their generative AI journey. You will learn how to: >• Understand evaluation criteria for both broad application needs as well as specialized use cases >• Evaluate models based on important criteria such as speed, accuracy, transparency, and more >• Ensure the economics and cost criteria are balanced with your business needs > :link: You can download <https://bit.ly/46pIPjw|here> > >Cost: free  We want to make this community useful for everyone, that's why we ask you to follow the "shameless channels" template and the rules:  https://datatalks.club/docs/general/guidelines/promotion/  Your post was removed from the channel. Please adjust your post.  Apologies for the inconvenience. Thank you!  to U06G4M3KH4J...
+
+removing message from C02N6N3S1FV at 1772303830.492279...
+
+END RequestId: 692d24a4-f35a-40e4-a9ec-8e0babd5a29d
+
+REPORT RequestId: 692d24a4-f35a-40e4-a9ec-8e0babd5a29d	Duration: 1369.97 ms	Billed Duration: 1821 ms	Memory Size: 128 MB	Max Memory Used: 63 MB	Init Duration: 450.53 ms	
+
+INIT_START Runtime Version: python:3.12.mainlinev2.v3	Runtime Version ARN: arn:aws:lambda:eu-west-1::runtime:27990c3d0965bea97240f3380b8d623b692705303bbde4c31fb02fa7daa05453
+
+START RequestId: 44c79811-a434-4550-8ae6-f3f1b93d3274 Version: $LATEST
+
+{"token": "uURN4G72mcTUEu4NNlJ0RAqA", "team_id": "T01ATQK62F8", "context_team_id": "T01ATQK62F8", "context_enterprise_id": null, "api_app_id": "A01S395330A", "event": {"type": "reaction_added", "user": "U01AXE0P5M3", "reaction": "clap", "item": {"type": "message", "channel": "C01FABYF2RG", "ts": "1772303797.690409"}, "item_user": "U0A8CTF4ABA", "event_ts": "1772312459.054000"}, "type": "event_callback", "event_id": "Ev0AJ5FDBV33", "event_time": 1772312459, "authorizations": [{"enterprise_id": null, "team_id": "T01ATQK62F8", "user_id": "U01AXE0P5M3", "is_bot": false, "is_enterprise_install": false}], "is_ext_shared_channel": false, "event_context": "4-eyJldCI6InJlYWN0aW9uX2FkZGVkIiwidGlkIjoiVDAxQVRRSzYyRjgiLCJhaWQiOiJBMDFTMzk1MzMwQSIsImNpZCI6IkMwMUZBQllGMlJHIn0"}
+
+reaction: clap
+
+no reaction config for clap
+
+END RequestId: 44c79811-a434-4550-8ae6-f3f1b93d3274
+
+REPORT RequestId: 44c79811-a434-4550-8ae6-f3f1b93d3274	Duration: 12.54 ms	Billed Duration: 439 ms	Memory Size: 128 MB	Max Memory Used: 63 MB	Init Duration: 425.80 ms	
+
+START RequestId: b647858a-a8b8-4fee-bf7c-8166e4b55fea Version: $LATEST
+
+{"token": "uURN4G72mcTUEu4NNlJ0RAqA", "team_id": "T01ATQK62F8", "context_team_id": "T01ATQK62F8", "context_enterprise_id": null, "api_app_id": "A01S395330A", "event": {"type": "reaction_added", "user": "U01AXE0P5M3", "reaction": "notbad", "item": {"type": "message", "channel": "C01FABYF2RG", "ts": "1772303797.690409"}, "item_user": "U0A8CTF4ABA", "event_ts": "1772312461.054100"}, "type": "event_callback", "event_id": "Ev0AHSHU57FU", "event_time": 1772312461, "authorizations": [{"enterprise_id": null, "team_id": "T01ATQK62F8", "user_id": "U01AXE0P5M3", "is_bot": false, "is_enterprise_install": false}], "is_ext_shared_channel": false, "event_context": "4-eyJldCI6InJlYWN0aW9uX2FkZGVkIiwidGlkIjoiVDAxQVRRSzYyRjgiLCJhaWQiOiJBMDFTMzk1MzMwQSIsImNpZCI6IkMwMUZBQllGMlJHIn0"}
+
+reaction: notbad
+
+no reaction config for notbad
+
+END RequestId: b647858a-a8b8-4fee-bf7c-8166e4b55fea
+
+REPORT RequestId: b647858a-a8b8-4fee-bf7c-8166e4b55fea	Duration: 1.62 ms	Billed Duration: 2 ms	Memory Size: 128 MB	Max Memory Used: 63 MB	
+
