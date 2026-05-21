@@ -118,7 +118,7 @@ def remove_message(channel, ts):
         "channel": channel,
         "ts": ts
     }
-    
+
     headers = {
         'Authorization': f'Bearer {USER_SLACK_TOKEN}'
     }
@@ -127,6 +127,58 @@ def remove_message(channel, ts):
     response = requests.post(url, json=message_request, headers=headers)
     response.raise_for_status()
     return response.json()
+
+
+def get_user_info(user_id):
+    """Fetch profile info for a Slack user."""
+    url = 'https://slack.com/api/users.info'
+
+    params = {'user': user_id}
+    headers = {'Authorization': f'Bearer {SLACK_TOKEN}'}
+
+    response = requests.get(url, params=params, headers=headers)
+    response.raise_for_status()
+    response_json = response.json()
+
+    if not response_json.get('ok'):
+        logger.info(f"users.info failed for {user_id}: {response_json.get('error')}")
+        return None
+
+    return response_json.get('user')
+
+
+def search_user_messages(username, after_date):
+    """Find messages from a given Slack username posted on or after `after_date` (YYYY-MM-DD).
+
+    Uses search.messages, which requires a user token with search:read.
+    Returns a list of message dicts with at least channel/ts/text/permalink.
+    """
+    url = 'https://slack.com/api/search.messages'
+    query = f'from:@{username} after:{after_date}'
+
+    headers = {'Authorization': f'Bearer {USER_SLACK_TOKEN}'}
+
+    matches = []
+    page = 1
+    while True:
+        params = {'query': query, 'count': 100, 'page': page, 'sort': 'timestamp'}
+        response = requests.get(url, params=params, headers=headers)
+        response.raise_for_status()
+        response_json = response.json()
+
+        if not response_json.get('ok'):
+            logger.info(f"search.messages failed: {response_json.get('error')}")
+            break
+
+        page_info = response_json.get('messages', {})
+        matches.extend(page_info.get('matches', []))
+
+        paging = page_info.get('paging', {})
+        if page >= paging.get('pages', 1):
+            break
+        page += 1
+
+    return matches
 
 
 def get_user_and_message(event):

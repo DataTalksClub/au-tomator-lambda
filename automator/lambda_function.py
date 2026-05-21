@@ -1,5 +1,7 @@
 import os
+import time
 import json
+from datetime import datetime, timedelta
 
 import yaml
 
@@ -233,12 +235,141 @@ def handle_repost_to_thread_and_delete(event, reaction_config):
     logger.info(f"Deleted original message from channel {channel} (kept in thread)")
 
 
+def _delete_message(channel, ts):
+    if FAKE_DELETE:
+        logger.info(f"FAKE_DELETE for {channel} {ts}")
+        return
+    slack.remove_message(channel, ts)
+
+
+def _format_reply_notification(template, reply_user, channel, reply_text):
+    escaped = reply_text.replace('{', '{{').replace('}', '}}')
+    values = {
+        'user': reply_user,
+        'channel': channel,
+        'user_message': escaped,
+    }
+    rendered = util.handle_qoutes(template, values)
+    return rendered.format(**values)
+
+
+def _format_admin_summary(template, target_user_id, user_info, parent_deleted,
+                         replies_deleted, admin_url):
+    profile = (user_info or {}).get('profile', {})
+    updated_ts = (user_info or {}).get('updated')
+    updated_str = datetime.utcfromtimestamp(updated_ts).strftime('%Y-%m-%d') if updated_ts else 'unknown'
+
+    values = {
+        'target_user': target_user_id,
+        'target_user_id': target_user_id,
+        'display_name': profile.get('display_name') or '',
+        'real_name': profile.get('real_name') or '',
+        'email': profile.get('email') or '',
+        'updated': updated_str,
+        'deleted_count': parent_deleted,
+        'thread_deleted_count': replies_deleted,
+        'admin_url': admin_url,
+    }
+    return template.format(**values)
+
+
+def handle_ban_user(event, reaction_config):
+    """Delete recent messages from a spammer (no DM to them),
+    notify innocent thread participants, and DM the reacting moderator
+    with a cleanup summary and admin-panel link."""
+    item = event['item']
+    channel = item['channel']
+    ts = item['ts']
+    moderator = event.get('user')
+
+    message_details = slack.get_message_content(channel, ts)
+    if not message_details:
+        logger.info(f"Ban: reacted message not found for {channel} {ts}")
+        return
+
+    target_user_id = message_details.get('user')
+    if not target_user_id:
+        logger.info("Ban: reacted message has no user; aborting")
+        return
+
+    if target_user_id in set(config.get('admins', [])):
+        logger.info(f"Ban: refusing to act on admin {target_user_id}")
+        return
+
+    user_info = slack.get_user_info(target_user_id) or {}
+    username = user_info.get('name') or user_info.get('profile', {}).get('display_name')
+    if not username:
+        logger.info(f"Ban: could not resolve username for {target_user_id}")
+        return
+
+    lookback_hours = int(reaction_config.get('lookback_hours', 24))
+    # search.messages 'after:' is day-granular and exclusive; pad by 1 day
+    # and then filter by exact timestamp to honor lookback_hours precisely.
+    pad_days = lookback_hours // 24 + 1
+    after_date = (datetime.utcnow() - timedelta(days=pad_days)).strftime('%Y-%m-%d')
+    cutoff_ts = time.time() - lookback_hours * 3600
+
+    matches = slack.search_user_messages(username, after_date)
+    matches = [m for m in matches if float(m.get('ts', 0)) >= cutoff_ts]
+    logger.info(f"Ban: found {len(matches)} messages for @{username} since {after_date}")
+
+    reply_template = reaction_config.get('reply_message')
+    deleted = set()
+    parent_deleted = 0
+    replies_deleted = 0
+
+    for msg in matches:
+        msg_channel = (msg.get('channel') or {}).get('id')
+        msg_ts = msg.get('ts')
+        if not msg_channel or not msg_ts:
+            continue
+
+        thread_ts = msg.get('thread_ts')
+        is_parent = (not thread_ts) or (thread_ts == msg_ts)
+
+        if is_parent:
+            for reply in slack.get_thread_replies(msg_channel, msg_ts):
+                reply_ts = reply['ts']
+                reply_user = reply.get('user')
+                key = (msg_channel, reply_ts)
+                if key in deleted:
+                    continue
+
+                if reply_user and reply_user != target_user_id and reply_template:
+                    notification = _format_reply_notification(
+                        reply_template, reply_user, msg_channel,
+                        reply.get('text', '')
+                    )
+                    slack.send_dm(reply_user, notification)
+
+                _delete_message(msg_channel, reply_ts)
+                deleted.add(key)
+                replies_deleted += 1
+
+        key = (msg_channel, msg_ts)
+        if key in deleted:
+            continue
+        _delete_message(msg_channel, msg_ts)
+        deleted.add(key)
+        parent_deleted += 1
+
+    admin_template = reaction_config.get('admin_message')
+    if admin_template and moderator:
+        admin_url = (config.get('workspace') or {}).get('admin_users_url', '')
+        summary = _format_admin_summary(
+            admin_template, target_user_id, user_info,
+            parent_deleted, replies_deleted, admin_url
+        )
+        slack.send_dm(moderator, summary)
+
+
 action_handlers = {
     'SLACK_POST': handle_slack_post,
     'DELETE_MESSAGE': handle_delete_message,
     'ASK_AI': handle_ask_ai,
     'REMOVE_BROADCAST': handle_remove_broadcast,
     'REPOST_TO_THREAD_AND_DELETE': handle_repost_to_thread_and_delete,
+    'BAN_USER': handle_ban_user,
 }
 
 

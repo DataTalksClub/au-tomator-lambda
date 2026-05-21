@@ -775,5 +775,160 @@ class TestRepostToThreadAndDelete(unittest.TestCase):
         mock_slack.remove_message.assert_not_called()
 
 
+class TestBanUser(unittest.TestCase):
+    """Test BAN_USER handler"""
+
+    def _base_reaction_config(self):
+        return {
+            'type': 'BAN_USER',
+            'lookback_hours': 24,
+            'reply_message': (
+                "Hi <@{user}>! Your message in <#{channel}> was removed.\n\n"
+                "> {user_message}\n"
+            ),
+            'admin_message': (
+                "Ban cleanup for <@{target_user}>.\n"
+                "ID: {target_user_id}\n"
+                "Name: {display_name} / {real_name}\n"
+                "Email: {email}\n"
+                "Updated: {updated}\n"
+                "Deleted: {deleted_count} parents, {thread_deleted_count} replies\n"
+                "Admin: {admin_url}"
+            ),
+        }
+
+    @patch('automator_lambda_function.slack')
+    def test_ban_user_happy_path(self, mock_slack):
+        """Search finds messages, replies notified, admin gets summary."""
+        mock_slack.get_message_content.return_value = {
+            'user': 'U_SPAMMER',
+            'text': 'spam message',
+        }
+        mock_slack.get_user_info.return_value = {
+            'id': 'U_SPAMMER',
+            'name': 'spammer',
+            'updated': 1700000000,
+            'profile': {
+                'display_name': 'Spammer',
+                'real_name': 'Spam McSpamface',
+                'email': 'spam@example.com',
+            },
+        }
+        # One parent (the reacted one) + one stray reply from spammer elsewhere
+        mock_slack.search_user_messages.return_value = [
+            {
+                'channel': {'id': 'C_AAA'},
+                'ts': '1234567890.000100',
+                'text': 'spam parent',
+            },
+            {
+                'channel': {'id': 'C_BBB'},
+                'ts': '1234567890.000200',
+                'thread_ts': '1234567890.000150',  # reply in someone else's thread
+                'text': 'spam reply',
+            },
+        ]
+        # The spammer's parent has two replies: one from another user, one from spammer
+        mock_slack.get_thread_replies.return_value = [
+            {'user': 'U_VICTIM', 'ts': '1234567890.000101', 'text': 'innocent reply'},
+            {'user': 'U_SPAMMER', 'ts': '1234567890.000102', 'text': 'spammer follow-up'},
+        ]
+
+        event = {
+            'user': 'UMOD',
+            'item': {'channel': 'C_AAA', 'ts': '1234567890.000100'},
+            'reaction': 'ban',
+        }
+
+        # Use real time so cutoff doesn't filter our test messages
+        with patch('automator_lambda_function.time.time', return_value=1234567890.0 + 1000), \
+             patch('automator_lambda_function.FAKE_DELETE', False):
+            lambda_function.handle_ban_user(event, self._base_reaction_config())
+
+        # Victim got a DM; spammer did NOT
+        dm_targets = [c.args[0] for c in mock_slack.send_dm.call_args_list]
+        self.assertIn('U_VICTIM', dm_targets)
+        self.assertNotIn('U_SPAMMER', dm_targets)
+        # Moderator got the admin summary DM
+        self.assertIn('UMOD', dm_targets)
+
+        # All 4 messages deleted: parent + victim reply + spammer reply + stray reply
+        deleted_keys = {
+            (c.args[0], c.args[1]) for c in mock_slack.remove_message.call_args_list
+        }
+        self.assertEqual(
+            deleted_keys,
+            {
+                ('C_AAA', '1234567890.000100'),
+                ('C_AAA', '1234567890.000101'),
+                ('C_AAA', '1234567890.000102'),
+                ('C_BBB', '1234567890.000200'),
+            },
+        )
+
+        # Admin summary should mention the spammer's ID and counts
+        admin_dm = next(c.args[1] for c in mock_slack.send_dm.call_args_list if c.args[0] == 'UMOD')
+        self.assertIn('U_SPAMMER', admin_dm)
+        self.assertIn('spam@example.com', admin_dm)
+        self.assertIn('https://datatalks-club.slack.com/admin', admin_dm)
+
+    @patch('automator_lambda_function.slack')
+    def test_ban_user_refuses_admin(self, mock_slack):
+        """Should never act when target is an admin in config."""
+        mock_slack.get_message_content.return_value = {
+            'user': 'U01AXE0P5M3',  # admin from config.yaml
+            'text': 'whatever',
+        }
+        event = {
+            'user': 'UMOD',
+            'item': {'channel': 'C_AAA', 'ts': '1234567890.000100'},
+            'reaction': 'ban',
+        }
+        lambda_function.handle_ban_user(event, self._base_reaction_config())
+        mock_slack.search_user_messages.assert_not_called()
+        mock_slack.remove_message.assert_not_called()
+        mock_slack.send_dm.assert_not_called()
+
+    @patch('automator_lambda_function.slack')
+    def test_ban_user_no_messages_still_dms_admin(self, mock_slack):
+        """If no messages match, we still send a summary DM to the moderator."""
+        mock_slack.get_message_content.return_value = {
+            'user': 'U_SPAMMER',
+            'text': 'spam',
+        }
+        mock_slack.get_user_info.return_value = {
+            'name': 'spammer',
+            'profile': {'display_name': 'Spammer'},
+        }
+        mock_slack.search_user_messages.return_value = []
+
+        event = {
+            'user': 'UMOD',
+            'item': {'channel': 'C_AAA', 'ts': '1234567890.000100'},
+            'reaction': 'ban',
+        }
+        lambda_function.handle_ban_user(event, self._base_reaction_config())
+
+        mock_slack.remove_message.assert_not_called()
+        dm_calls = mock_slack.send_dm.call_args_list
+        self.assertEqual(len(dm_calls), 1)
+        self.assertEqual(dm_calls[0].args[0], 'UMOD')
+        self.assertIn('U_SPAMMER', dm_calls[0].args[1])
+
+    def test_ban_reaction_config_loaded(self):
+        reaction_config = lambda_function.reaction_configs.get('ban')
+        self.assertIsNotNone(reaction_config)
+        self.assertEqual(reaction_config['type'], 'BAN_USER')
+        self.assertIn('reply_message', reaction_config)
+        self.assertIn('admin_message', reaction_config)
+
+    def test_action_handlers_has_ban_user(self):
+        self.assertIn('BAN_USER', lambda_function.action_handlers)
+        self.assertEqual(
+            lambda_function.action_handlers['BAN_USER'],
+            lambda_function.handle_ban_user,
+        )
+
+
 if __name__ == '__main__':
     unittest.main()

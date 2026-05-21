@@ -1,6 +1,9 @@
 admins:
   - U01AXE0P5M3
 
+workspace:
+  admin_users_url: https://datatalks-club.slack.com/admin
+
 channels:
   C02R98X7DS9: "course-mlops-zoomcamp"
   C01FABYF2RG: "course-data-engineering"
@@ -222,3 +225,34 @@ reactions:
       Hi <@{user}>! We asked AI, and this is what it answered:
 
       {ai_response}
+
+  - reaction: ban
+    type: BAN_USER
+    lookback_hours: 24
+    reply_message: |
+      Hi <@{user}>!
+
+      Your message in <#{channel}> was deleted because the parent message or thread topic was removed for violating the community guidelines:
+
+      https://datatalks.club/docs/general/guidelines/
+
+      Since the parent was removed, your reply was also removed. If you'd like to continue the conversation, here's the message you wrote — feel free to repost it in another thread:
+
+      > {user_message}
+    admin_message: |
+      🚨 Ban cleanup completed
+
+      *User:* <@{target_user}>
+      *User ID:* `{target_user_id}`
+      *Display name:* {display_name}
+      *Real name:* {real_name}
+      *Email:* {email}
+      *Profile last updated:* {updated}
+
+      *Messages deleted:* {deleted_count}
+      *Thread replies deleted:* {thread_deleted_count}
+
+      *Next step — deactivate manually:*
+      1. Open <{admin_url}|admin members page>
+      2. Search for this exact user ID: `{target_user_id}`
+      3. Open the matching member and deactivate.
