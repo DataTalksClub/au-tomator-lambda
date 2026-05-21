@@ -226,7 +226,7 @@ reactions:
 
       {ai_response}
 
-  - reaction: ban
+  - reaction: ban-user
     type: BAN_USER
     lookback_hours: 24
     reply_message: |

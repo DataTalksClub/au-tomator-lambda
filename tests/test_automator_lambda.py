@@ -569,16 +569,14 @@ class TestRepostToThreadAndDelete(unittest.TestCase):
     """Test REPOST_TO_THREAD_AND_DELETE handler"""
     
     @patch('automator_lambda_function.slack')
-    @patch('automator_lambda_function.util')
-    def test_repost_with_placeholders(self, mock_util, mock_slack):
+    def test_repost_with_placeholders(self, mock_slack):
         """Test REPOST_TO_THREAD_AND_DELETE with channel-specific placeholders"""
         # Setup mocks
         mock_slack.get_message_content.return_value = {
             'user': 'U123456',
             'text': 'Here is my error log with lots of text'
         }
-        mock_util.format_message.return_value = "Removing the message. Follow <link|these recommendations>. Here's the original message:\n\n> {user_message}"
-        
+
         # Create event
         event = {
             'item': {
@@ -735,17 +733,14 @@ class TestRepostToThreadAndDelete(unittest.TestCase):
         self.assertIn('POSTGRES_USER', posted_message)
     
     @patch('automator_lambda_function.slack')
-    @patch('automator_lambda_function.util')
-    def test_repost_placeholder_returns_none(self, mock_util, mock_slack):
+    def test_repost_placeholder_returns_none(self, mock_slack):
         """Test REPOST_TO_THREAD_AND_DELETE handles placeholder matching failure gracefully"""
         # Setup mocks
         mock_slack.get_message_content.return_value = {
             'user': 'U123456',
             'text': 'Error message'
         }
-        # util.format_message returns None when no placeholder matches and no default
-        mock_util.format_message.return_value = None
-        
+
         # Create event
         event = {
             'item': {
@@ -837,7 +832,7 @@ class TestBanUser(unittest.TestCase):
         event = {
             'user': 'UMOD',
             'item': {'channel': 'C_AAA', 'ts': '1234567890.000100'},
-            'reaction': 'ban',
+            'reaction': 'ban-user',
         }
 
         # Use real time so cutoff doesn't filter our test messages
@@ -882,7 +877,7 @@ class TestBanUser(unittest.TestCase):
         event = {
             'user': 'UMOD',
             'item': {'channel': 'C_AAA', 'ts': '1234567890.000100'},
-            'reaction': 'ban',
+            'reaction': 'ban-user',
         }
         lambda_function.handle_ban_user(event, self._base_reaction_config())
         mock_slack.search_user_messages.assert_not_called()
@@ -905,7 +900,7 @@ class TestBanUser(unittest.TestCase):
         event = {
             'user': 'UMOD',
             'item': {'channel': 'C_AAA', 'ts': '1234567890.000100'},
-            'reaction': 'ban',
+            'reaction': 'ban-user',
         }
         lambda_function.handle_ban_user(event, self._base_reaction_config())
 
@@ -916,7 +911,7 @@ class TestBanUser(unittest.TestCase):
         self.assertIn('U_SPAMMER', dm_calls[0].args[1])
 
     def test_ban_reaction_config_loaded(self):
-        reaction_config = lambda_function.reaction_configs.get('ban')
+        reaction_config = lambda_function.reaction_configs.get('ban-user')
         self.assertIsNotNone(reaction_config)
         self.assertEqual(reaction_config['type'], 'BAN_USER')
         self.assertIn('reply_message', reaction_config)
