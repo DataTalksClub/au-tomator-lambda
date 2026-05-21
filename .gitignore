@@ -4,6 +4,7 @@ package.zip
 __pycache__/
 .envrc
 venv/
+.venv/
 .vscode
 localstack-data/
 *.pyc
