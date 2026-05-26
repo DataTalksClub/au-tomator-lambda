@@ -840,12 +840,14 @@ class TestBanUser(unittest.TestCase):
              patch('automator_lambda_function.FAKE_DELETE', False):
             lambda_function.handle_ban_user(event, self._base_reaction_config())
 
-        # Victim got a DM; spammer did NOT
+        # Victim got a DM; spammer did NOT. Moderator also gets an ID-only DM.
         dm_targets = [c.args[0] for c in mock_slack.send_dm.call_args_list]
         self.assertIn('U_VICTIM', dm_targets)
-        self.assertNotIn('U_SPAMMER', dm_targets)
-        # Moderator got the admin summary DM
         self.assertIn('UMOD', dm_targets)
+        self.assertNotIn('U_SPAMMER', dm_targets)
+        # Moderator got the admin summary DM with blocks
+        mock_slack.send_dm_blocks.assert_called_once()
+        self.assertEqual(mock_slack.send_dm_blocks.call_args.args[0], 'UMOD')
 
         # All 4 messages deleted: parent + victim reply + spammer reply + stray reply
         deleted_keys = {
@@ -862,10 +864,19 @@ class TestBanUser(unittest.TestCase):
         )
 
         # Admin summary should mention the spammer's ID and counts
-        admin_dm = next(c.args[1] for c in mock_slack.send_dm.call_args_list if c.args[0] == 'UMOD')
+        admin_dm = mock_slack.send_dm_blocks.call_args.args[1]
         self.assertIn('U_SPAMMER', admin_dm)
         self.assertIn('spam@example.com', admin_dm)
         self.assertIn('https://datatalks-club.slack.com/admin', admin_dm)
+        admin_blocks = mock_slack.send_dm_blocks.call_args.args[2]
+        self.assertIn('```U_SPAMMER```', admin_blocks[1]['text']['text'])
+        self.assertEqual(
+            admin_blocks[2]['elements'][0]['url'],
+            'https://datatalks-club.slack.com/admin',
+        )
+        self.assertEqual(admin_blocks[2]['elements'][0]['value'], 'U_SPAMMER')
+        id_only_dm = next(c.args[1] for c in mock_slack.send_dm.call_args_list if c.args[0] == 'UMOD')
+        self.assertEqual(id_only_dm, 'U_SPAMMER')
 
     @patch('automator_lambda_function.slack')
     def test_ban_user_refuses_admin(self, mock_slack):
@@ -905,10 +916,10 @@ class TestBanUser(unittest.TestCase):
         lambda_function.handle_ban_user(event, self._base_reaction_config())
 
         mock_slack.remove_message.assert_not_called()
-        dm_calls = mock_slack.send_dm.call_args_list
-        self.assertEqual(len(dm_calls), 1)
-        self.assertEqual(dm_calls[0].args[0], 'UMOD')
-        self.assertIn('U_SPAMMER', dm_calls[0].args[1])
+        mock_slack.send_dm.assert_called_once_with('UMOD', 'U_SPAMMER')
+        mock_slack.send_dm_blocks.assert_called_once()
+        self.assertEqual(mock_slack.send_dm_blocks.call_args.args[0], 'UMOD')
+        self.assertIn('U_SPAMMER', mock_slack.send_dm_blocks.call_args.args[1])
 
     def test_ban_reaction_config_loaded(self):
         reaction_config = lambda_function.reaction_configs.get('ban-user')

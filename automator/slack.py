@@ -90,7 +90,7 @@ def get_thread_replies(channel, ts):
     return thread_replies
 
 
-def send_dm(user, message):    
+def send_dm(user, message):
     url = 'https://slack.com/api/chat.postMessage'
 
     message_request = {
@@ -106,6 +106,25 @@ def send_dm(user, message):
     }
     
     logger.info(f'posting {message} to {user}...')
+    response = requests.post(url, json=message_request, headers=headers)
+    response.raise_for_status()
+    return response.json()
+
+
+def send_dm_blocks(user, message, blocks):
+    url = 'https://slack.com/api/chat.postMessage'
+
+    message_request = {
+        "channel": user,
+        "text": message,
+        "blocks": blocks,
+    }
+
+    headers = {
+        'Authorization': f'Bearer {SLACK_TOKEN}'
+    }
+
+    logger.info(f'posting blocks DM to {user}...')
     response = requests.post(url, json=message_request, headers=headers)
     response.raise_for_status()
     return response.json()

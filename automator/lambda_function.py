@@ -273,6 +273,37 @@ def _format_admin_summary(template, target_user_id, user_info, parent_deleted,
     return template.format(**values)
 
 
+def _build_admin_summary_blocks(summary, target_user_id, admin_url):
+    blocks = [
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": summary},
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*Target user ID for copying:*\n```{target_user_id}```",
+            },
+        },
+    ]
+
+    if admin_url:
+        blocks.append({
+            "type": "actions",
+            "elements": [{
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Open admin members"},
+                "url": admin_url,
+                "action_id": "open_admin_members",
+                "value": target_user_id,
+                "style": "primary",
+            }],
+        })
+
+    return blocks
+
+
 def handle_ban_user(event, reaction_config):
     """Delete recent messages from a spammer (no DM to them),
     notify innocent thread participants, and DM the reacting moderator
@@ -360,7 +391,9 @@ def handle_ban_user(event, reaction_config):
             admin_template, target_user_id, user_info,
             parent_deleted, replies_deleted, admin_url
         )
-        slack.send_dm(moderator, summary)
+        blocks = _build_admin_summary_blocks(summary, target_user_id, admin_url)
+        slack.send_dm_blocks(moderator, summary, blocks)
+        slack.send_dm(moderator, target_user_id)
 
 
 action_handlers = {
