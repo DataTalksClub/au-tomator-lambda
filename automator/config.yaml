@@ -55,11 +55,11 @@ reactions:
     type: REPOST_TO_THREAD_AND_DELETE
     placeholders:
       link:
-        course-ml-zoomcamp: https://github.com/DataTalksClub/machine-learning-zoomcamp/blob/master/asking-questions.md
-        course-data-engineering: https://github.com/DataTalksClub/data-engineering-zoomcamp/blob/main/asking-questions.md
-        course-mlops-zoomcamp: https://github.com/DataTalksClub/mlops-zoomcamp/blob/main/asking-questions.md
-        course-llm-zoomcamp: https://github.com/DataTalksClub/llm-zoomcamp/blob/main/asking-questions.md
-        default: https://datatalks.club/docs/general/guidelines/asking-for-help/
+        course-ml-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        course-data-engineering: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        course-mlops-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        course-llm-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        default: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
     message: |
       Removing the message from the channel to save space. Please move the error log to the thread.
 
@@ -75,11 +75,11 @@ reactions:
     type: SLACK_POST
     placeholders:
       link:
-        course-ml-zoomcamp: https://github.com/alexeygrigorev/mlbookcamp-code/blob/master/course-zoomcamp/asking-questions.md
-        course-data-engineering: https://github.com/DataTalksClub/data-engineering-zoomcamp/blob/main/asking-questions.md
-        course-mlops-zoomcamp: https://github.com/DataTalksClub/mlops-zoomcamp/blob/main/asking-questions.md
-        course-llm-zoomcamp: https://github.com/DataTalksClub/llm-zoomcamp/blob/main/asking-questions.md
-        default: https://datatalks.club/docs/general/guidelines/asking-for-help/
+        course-ml-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        course-data-engineering: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        course-mlops-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        course-llm-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        default: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
     message: |
       Please don't post screenshots or pictures of your code, they are very difficult to read.
 
