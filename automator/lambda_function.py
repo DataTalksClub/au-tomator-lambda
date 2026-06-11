@@ -238,8 +238,38 @@ def handle_repost_to_thread_and_delete(event, reaction_config):
 def _delete_message(channel, ts):
     if FAKE_DELETE:
         logger.info(f"FAKE_DELETE for {channel} {ts}")
-        return
-    slack.remove_message(channel, ts)
+        return True
+
+    response = slack.remove_message(channel, ts)
+    if isinstance(response, dict) and not response.get('ok', False):
+        logger.info(
+            f"delete failed for {channel} {ts}: {response.get('error')}"
+        )
+        return False
+
+    return True
+
+
+def _message_key(message):
+    channel = message.get('channel')
+    if isinstance(channel, dict):
+        channel = channel.get('id')
+
+    return channel, message.get('ts')
+
+
+def _seed_ban_message(channel, ts, message_details):
+    seed = {
+        'channel': {'id': channel},
+        'ts': ts,
+        'text': message_details.get('text', ''),
+    }
+
+    thread_ts = message_details.get('thread_ts')
+    if thread_ts:
+        seed['thread_ts'] = thread_ts
+
+    return seed
 
 
 def _format_reply_notification(template, reply_user, channel, reply_text):
@@ -329,9 +359,6 @@ def handle_ban_user(event, reaction_config):
 
     user_info = slack.get_user_info(target_user_id) or {}
     username = user_info.get('name') or user_info.get('profile', {}).get('display_name')
-    if not username:
-        logger.info(f"Ban: could not resolve username for {target_user_id}")
-        return
 
     lookback_hours = int(reaction_config.get('lookback_hours', 24))
     # search.messages 'after:' is day-granular and exclusive; pad by 1 day
@@ -340,9 +367,27 @@ def handle_ban_user(event, reaction_config):
     after_date = (datetime.utcnow() - timedelta(days=pad_days)).strftime('%Y-%m-%d')
     cutoff_ts = time.time() - lookback_hours * 3600
 
-    matches = slack.search_user_messages(username, after_date)
-    matches = [m for m in matches if float(m.get('ts', 0)) >= cutoff_ts]
-    logger.info(f"Ban: found {len(matches)} messages for @{username} since {after_date}")
+    search_matches = []
+    if username:
+        search_matches = slack.search_user_messages(username, after_date)
+        search_matches = [
+            m for m in search_matches
+            if float(m.get('ts', 0)) >= cutoff_ts
+        ]
+        logger.info(
+            f"Ban: found {len(search_matches)} messages for @{username} "
+            f"since {after_date}"
+        )
+    else:
+        logger.info(f"Ban: could not resolve username for {target_user_id}; deleting reacted message only")
+
+    matches = [_seed_ban_message(channel, ts, message_details)]
+    seen = {_message_key(matches[0])}
+    for match in search_matches:
+        key = _message_key(match)
+        if key not in seen:
+            matches.append(match)
+            seen.add(key)
 
     reply_template = reaction_config.get('reply_message')
     deleted = set()
@@ -373,16 +418,16 @@ def handle_ban_user(event, reaction_config):
                     )
                     slack.send_dm(reply_user, notification)
 
-                _delete_message(msg_channel, reply_ts)
-                deleted.add(key)
-                replies_deleted += 1
+                if _delete_message(msg_channel, reply_ts):
+                    deleted.add(key)
+                    replies_deleted += 1
 
         key = (msg_channel, msg_ts)
         if key in deleted:
             continue
-        _delete_message(msg_channel, msg_ts)
-        deleted.add(key)
-        parent_deleted += 1
+        if _delete_message(msg_channel, msg_ts):
+            deleted.add(key)
+            parent_deleted += 1
 
     admin_template = reaction_config.get('admin_message')
     if admin_template and moderator:

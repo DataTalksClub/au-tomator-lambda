@@ -897,7 +897,7 @@ class TestBanUser(unittest.TestCase):
 
     @patch('automator_lambda_function.slack')
     def test_ban_user_no_messages_still_dms_admin(self, mock_slack):
-        """If no messages match, we still send a summary DM to the moderator."""
+        """If search misses, still delete the reacted message and DM moderator."""
         mock_slack.get_message_content.return_value = {
             'user': 'U_SPAMMER',
             'text': 'spam',
@@ -913,13 +913,53 @@ class TestBanUser(unittest.TestCase):
             'item': {'channel': 'C_AAA', 'ts': '1234567890.000100'},
             'reaction': 'ban-user',
         }
-        lambda_function.handle_ban_user(event, self._base_reaction_config())
+        with patch('automator_lambda_function.FAKE_DELETE', False):
+            lambda_function.handle_ban_user(event, self._base_reaction_config())
 
-        mock_slack.remove_message.assert_not_called()
+        mock_slack.remove_message.assert_called_once_with(
+            'C_AAA', '1234567890.000100'
+        )
         mock_slack.send_dm.assert_called_once_with('UMOD', 'U_SPAMMER')
         mock_slack.send_dm_blocks.assert_called_once()
         self.assertEqual(mock_slack.send_dm_blocks.call_args.args[0], 'UMOD')
         self.assertIn('U_SPAMMER', mock_slack.send_dm_blocks.call_args.args[1])
+        self.assertIn(
+            'Deleted: 1 parents, 0 replies',
+            mock_slack.send_dm_blocks.call_args.args[1],
+        )
+
+    @patch('automator_lambda_function.slack')
+    def test_ban_user_delete_failure_not_counted(self, mock_slack):
+        """Slack delete failures should not be counted as deleted messages."""
+        mock_slack.get_message_content.return_value = {
+            'user': 'U_SPAMMER',
+            'text': 'spam',
+        }
+        mock_slack.get_user_info.return_value = {
+            'name': 'spammer',
+            'profile': {'display_name': 'Spammer'},
+        }
+        mock_slack.search_user_messages.return_value = []
+        mock_slack.remove_message.return_value = {
+            'ok': False,
+            'error': 'cant_delete_message',
+        }
+
+        event = {
+            'user': 'UMOD',
+            'item': {'channel': 'C_AAA', 'ts': '1234567890.000100'},
+            'reaction': 'ban-user',
+        }
+        with patch('automator_lambda_function.FAKE_DELETE', False):
+            lambda_function.handle_ban_user(event, self._base_reaction_config())
+
+        mock_slack.remove_message.assert_called_once_with(
+            'C_AAA', '1234567890.000100'
+        )
+        self.assertIn(
+            'Deleted: 0 parents, 0 replies',
+            mock_slack.send_dm_blocks.call_args.args[1],
+        )
 
     def test_ban_reaction_config_loaded(self):
         reaction_config = lambda_function.reaction_configs.get('ban-user')
