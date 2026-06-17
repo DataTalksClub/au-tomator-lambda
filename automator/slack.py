@@ -14,6 +14,10 @@ def post_message_thread(event, message):
     channel = item['channel']
     thread_ts = item['ts']
 
+    return post_message_to_thread(channel, thread_ts, message)
+
+
+def post_message_to_thread(channel, thread_ts, message):
     url = 'https://slack.com/api/chat.postMessage'
 
     message_request = {

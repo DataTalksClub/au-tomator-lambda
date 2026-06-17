@@ -512,6 +512,7 @@ class TestChannelConfig(unittest.TestCase):
             'C0288NJ5XSA': 'course-ml-zoomcamp',
             'C06TEGTGM3J': 'course-llm-zoomcamp',
             'C09HWT76L95': 'course-ai-dev-tools-zoomcamp',
+            'C06L1RTF10F': 'course-stock-markets-analytics-zoomcamp',
         }
         
         for channel_id, expected_name in expected_channels.items():
@@ -973,6 +974,129 @@ class TestBanUser(unittest.TestCase):
         self.assertEqual(
             lambda_function.action_handlers['BAN_USER'],
             lambda_function.handle_ban_user,
+        )
+
+
+class TestFaqAssistant(unittest.TestCase):
+    """Test Cloudflare FAQ assistant integration."""
+
+    def test_build_course_payload_from_known_channel(self):
+        event = {
+            'type': 'app_mention',
+            'channel': 'C06TEGTGM3J',
+            'text': '<@UFAQBOT> Can I still join after the course started?',
+        }
+
+        payload = lambda_function.build_faq_assistant_payload(event)
+
+        self.assertEqual(payload['question'], 'Can I still join after the course started?')
+        self.assertEqual(payload['scope'], 'course')
+        self.assertEqual(payload['course'], 'llm-zoomcamp')
+
+    def test_build_docs_payload_from_unknown_channel(self):
+        event = {
+            'type': 'app_mention',
+            'channel': 'C_UNKNOWN',
+            'text': '<@UFAQBOT> How do I join Slack?',
+        }
+
+        payload = lambda_function.build_faq_assistant_payload(event)
+
+        self.assertEqual(payload['question'], 'How do I join Slack?')
+        self.assertEqual(payload['scope'], 'docs')
+        self.assertNotIn('course', payload)
+
+    @patch('automator_lambda_function.requests.post')
+    def test_call_faq_assistant_sends_shared_secret_header(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {'answer': 'answer'}
+        mock_post.return_value = mock_response
+
+        with patch('automator_lambda_function.FAQ_ASSISTANT_URL', 'https://worker.example.com'):
+            with patch('automator_lambda_function.FAQ_ASSISTANT_SHARED_SECRET', 'secret-value'):
+                result = lambda_function.call_faq_assistant({'question': 'q', 'scope': 'docs'})
+
+        self.assertEqual(result, {'answer': 'answer'})
+        mock_post.assert_called_once_with(
+            'https://worker.example.com/ask',
+            json={'question': 'q', 'scope': 'docs'},
+            headers={'x-faq-assistant-secret': 'secret-value'},
+            timeout=lambda_function.FAQ_ASSISTANT_TIMEOUT,
+        )
+        mock_response.raise_for_status.assert_called_once()
+
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.call_faq_assistant')
+    def test_handle_app_mention_posts_answer_to_thread(self, mock_call, mock_slack):
+        mock_call.return_value = {
+            'answer': 'See [FAQ](https://datatalks.club/faq/).'
+        }
+        mock_slack.github_to_slack_markdown.return_value = (
+            'See <https://datatalks.club/faq/|FAQ>.'
+        )
+        event = {
+            'type': 'app_mention',
+            'channel': 'C06TEGTGM3J',
+            'text': '<@UFAQBOT> Can I still join?',
+            'ts': '1790000000.000100',
+        }
+
+        lambda_function.handle_app_mention(event)
+
+        mock_call.assert_called_once_with({
+            'question': 'Can I still join?',
+            'scope': 'course',
+            'course': 'llm-zoomcamp',
+        })
+        mock_slack.post_message_to_thread.assert_called_once_with(
+            'C06TEGTGM3J',
+            '1790000000.000100',
+            'See <https://datatalks.club/faq/|FAQ>.',
+        )
+
+    def test_faq_reaction_config_uses_faq_assistant(self):
+        reaction_config = lambda_function.reaction_configs.get('faq')
+        self.assertIsNotNone(reaction_config)
+        self.assertEqual(reaction_config['type'], 'FAQ_ASSISTANT')
+
+    def test_action_handlers_has_faq_assistant(self):
+        self.assertIn('FAQ_ASSISTANT', lambda_function.action_handlers)
+        self.assertEqual(
+            lambda_function.action_handlers['FAQ_ASSISTANT'],
+            lambda_function.handle_faq_assistant_reaction,
+        )
+
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.call_faq_assistant')
+    def test_handle_faq_reaction_posts_answer_to_original_thread(self, mock_call, mock_slack):
+        mock_slack.get_message.return_value = (
+            'UQUESTION',
+            'Can I still join after the course started?',
+        )
+        mock_call.return_value = {
+            'answer': 'Yes, you can still join.'
+        }
+        mock_slack.github_to_slack_markdown.return_value = 'Yes, you can still join.'
+        event = {
+            'type': 'reaction_added',
+            'reaction': 'faq',
+            'item': {
+                'channel': 'C06TEGTGM3J',
+                'ts': '1790000000.000100',
+            },
+        }
+
+        lambda_function.handle_faq_assistant_reaction(event, {'type': 'FAQ_ASSISTANT'})
+
+        mock_call.assert_called_once_with({
+            'question': 'Can I still join after the course started?',
+            'scope': 'course',
+            'course': 'llm-zoomcamp',
+        })
+        mock_slack.post_message_to_thread.assert_called_once_with(
+            'C06TEGTGM3J',
+            '1790000000.000100',
+            'Yes, you can still join.',
         )
 
 

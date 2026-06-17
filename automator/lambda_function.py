@@ -1,8 +1,10 @@
 import os
+import re
 import time
 import json
 from datetime import datetime, timedelta
 
+import requests
 import yaml
 
 import util
@@ -13,6 +15,9 @@ from logs import logger
 
 FAKE_DELETE = os.getenv('FAKE_DELETE', '0') == '1'
 CONFIG_FILE = os.getenv('CONFIG_FILE', 'config.yaml')
+FAQ_ASSISTANT_URL = os.getenv('FAQ_ASSISTANT_URL', '').strip()
+FAQ_ASSISTANT_SHARED_SECRET = os.getenv('FAQ_ASSISTANT_SHARED_SECRET', '')
+FAQ_ASSISTANT_TIMEOUT = int(os.getenv('FAQ_ASSISTANT_TIMEOUT', '55'))
 
 
 
@@ -29,6 +34,114 @@ for c in config['reactions']:
 
 def get_channel_name(channel_id):
     return config['channels'].get(channel_id, None)
+
+
+def clean_app_mention_text(text):
+    text = re.sub(r'<@[A-Z0-9]+>', ' ', text or '')
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
+
+
+def faq_assistant_endpoint():
+    if not FAQ_ASSISTANT_URL:
+        return None
+    if FAQ_ASSISTANT_URL.rstrip('/').endswith('/ask'):
+        return FAQ_ASSISTANT_URL
+    return f'{FAQ_ASSISTANT_URL.rstrip("/")}/ask'
+
+
+def course_for_channel(channel_id):
+    channel_name = get_channel_name(channel_id)
+    course_mapping = (config.get('faq_assistant') or {}).get('courses') or {}
+    return course_mapping.get(channel_name)
+
+
+def build_faq_assistant_payload(event):
+    return build_faq_assistant_payload_for_question(
+        event.get('channel'),
+        event.get('text', ''),
+    )
+
+
+def build_faq_assistant_payload_for_question(channel, question):
+    course = course_for_channel(channel)
+    payload = {
+        'question': clean_app_mention_text(question),
+        'scope': 'course' if course else 'docs',
+    }
+
+    if course:
+        payload['course'] = course
+
+    return payload
+
+
+def call_faq_assistant(payload):
+    endpoint = faq_assistant_endpoint()
+    if not endpoint:
+        logger.info('FAQ_ASSISTANT_URL is not set; skipping FAQ assistant request')
+        return None
+
+    headers = {}
+    if FAQ_ASSISTANT_SHARED_SECRET:
+        headers['x-faq-assistant-secret'] = FAQ_ASSISTANT_SHARED_SECRET
+
+    response = requests.post(
+        endpoint, json=payload, headers=headers, timeout=FAQ_ASSISTANT_TIMEOUT
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def post_faq_assistant_answer(channel, thread_ts, payload):
+    if not channel or not thread_ts:
+        logger.info('FAQ assistant request missing channel or ts')
+        return
+
+    if not payload['question']:
+        slack.post_message_to_thread(
+            channel, thread_ts,
+            'Please include a question.'
+        )
+        return
+
+    logger.info(
+        f"FAQ assistant request: scope={payload['scope']} "
+        f"course={payload.get('course', '')}"
+    )
+    answer = call_faq_assistant(payload)
+    if not answer:
+        return
+
+    message = answer.get('answer') or "I couldn't find an answer."
+    message = slack.github_to_slack_markdown(message)
+    slack.post_message_to_thread(channel, thread_ts, message)
+
+
+def handle_app_mention(event):
+    if event.get('bot_id'):
+        logger.info('Ignoring bot app_mention')
+        return
+
+    channel = event.get('channel')
+    thread_ts = event.get('thread_ts') or event.get('ts')
+    payload = build_faq_assistant_payload(event)
+
+    post_faq_assistant_answer(channel, thread_ts, payload)
+
+
+def handle_faq_assistant_reaction(event, reaction_config):
+    item = event.get('item') or {}
+    channel = item.get('channel')
+    thread_ts = item.get('ts')
+
+    if not channel or not thread_ts:
+        logger.info('faq reaction missing channel or ts')
+        return
+
+    _, original_message = slack.get_message(event)
+    payload = build_faq_assistant_payload_for_question(channel, original_message)
+    post_faq_assistant_answer(channel, thread_ts, payload)
     
 
 def handle_slack_post(event, reaction_config):
@@ -445,6 +558,7 @@ action_handlers = {
     'SLACK_POST': handle_slack_post,
     'DELETE_MESSAGE': handle_delete_message,
     'ASK_AI': handle_ask_ai,
+    'FAQ_ASSISTANT': handle_faq_assistant_reaction,
     'REMOVE_BROADCAST': handle_remove_broadcast,
     'REPOST_TO_THREAD_AND_DELETE': handle_repost_to_thread_and_delete,
     'BAN_USER': handle_ban_user,
@@ -483,8 +597,18 @@ def process_reaction(body, event):
 def run(body):
     print(json.dumps(body))
     event = body['event']
-    logger.info(f'reaction: {event["reaction"]}')
-    process_reaction(body, event)
+    event_type = event.get('type')
+
+    if event_type == 'app_mention':
+        handle_app_mention(event)
+        return
+
+    if event_type == 'reaction_added':
+        logger.info(f'reaction: {event["reaction"]}')
+        process_reaction(body, event)
+        return
+
+    logger.info(f'unsupported event type: {event_type}')
 
 
 def lambda_handler(event, context):

@@ -10,6 +10,16 @@ channels:
   C0288NJ5XSA: "course-ml-zoomcamp"
   C06TEGTGM3J: "course-llm-zoomcamp"
   C09HWT76L95: "course-ai-dev-tools-zoomcamp"
+  C06L1RTF10F: "course-stock-markets-analytics-zoomcamp"
+
+faq_assistant:
+  courses:
+    course-data-engineering: data-engineering-zoomcamp
+    course-mlops-zoomcamp: mlops-zoomcamp
+    course-llm-zoomcamp: llm-zoomcamp
+    course-ml-zoomcamp: machine-learning-zoomcamp
+    course-ai-dev-tools-zoomcamp: ai-dev-tools-zoomcamp
+    course-stock-markets-analytics-zoomcamp: stock-markets-analytics-zoomcamp
 
 reactions:
   - reaction: dont-ask-to-ask-just-ask
@@ -41,15 +51,7 @@ reactions:
       Thank you for helping us keep the community organized!
 
   - reaction: faq
-    type: SLACK_POST
-    placeholders:
-      link:
-        course-ml-zoomcamp: https://datatalks.club/faq/machine-learning-zoomcamp.html
-        course-data-engineering: https://datatalks.club/faq/data-engineering-zoomcamp.html
-        course-mlops-zoomcamp: https://datatalks.club/faq/mlops-zoomcamp.html
-        course-llm-zoomcamp: https://datatalks.club/faq/llm-zoomcamp.html
-    message: >
-      Please check the <{link}|FAQ>
+    type: FAQ_ASSISTANT
 
   - reaction: error-log-to-thread-please
     type: REPOST_TO_THREAD_AND_DELETE

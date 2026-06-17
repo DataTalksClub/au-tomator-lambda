@@ -15,12 +15,13 @@ Its only job is to look at the incoming event and quickly decide where it should
 | Event | Routed to |
 |-------|-----------|
 | **Reaction added by admin** | Automator |
+| **App mention** when `FAQ_ASSISTANT_URL` is set | Automator / FAQ Assistant |
 | **Message event** | Moderator |
 | **Button click** (e.g. from an alert) | Moderator |
 
 The router and automator are separate on purpose: Slack expects a response within about 3 seconds. The router responds immediately and invokes the automator (or moderator) asynchronously, so longer work doesn’t time out.
 
-### 2. Automator — Acts based on emoji reactions by the admin
+### 2. Automator — Acts based on emoji reactions by the admin and FAQ mentions
 
 This is for fast reaction on spam and other rule violations.
 
@@ -29,6 +30,7 @@ This is for fast reaction on spam and other rule violations.
   - **Posting a reply** in the thread (e.g. FAQ link, “use threads” reminder).
   - **Deleting the message** and sending a DM to the author explaining why (e.g. rule violation).
   - **Asking an AI** to generate an answer and posting it in the thread (e.g. `:ask-ai:`).
+- When anyone tags the bot, the automator can call the Cloudflare FAQ assistant and post the answer in the thread.
 
 Examples:
 
@@ -61,6 +63,14 @@ Deploy in this order:
 cd router
 bash publish.sh
 ```
+
+The router Lambda function name is `slack-test`. The separate GitHub Actions workflow
+`.github/workflows/deploy-router.yml` deploys this Lambda after tests pass on `main`,
+or manually via workflow dispatch. If the Lambda is renamed later, set the repository
+variable `ROUTER_FUNCTION_NAME`; otherwise it defaults to `slack-test`.
+
+The AWS credentials used by GitHub Actions need `lambda:UpdateFunctionCode`,
+`lambda:GetFunction`, and `lambda:GetFunctionConfiguration` for `slack-test`.
 
 **2. Automator**
 
@@ -130,6 +140,7 @@ Each entry defines an emoji (reaction name) and what the automator should do whe
 | `SLACK_POST` | Posts a message in the thread (e.g. reminder, link). |
 | `DELETE_MESSAGE` | Deletes the message and sends a DM to the author (e.g. rule violation). |
 | `ASK_AI` | Calls an AI model, then posts the reply in the thread. |
+| `FAQ_ASSISTANT` | Calls the Cloudflare FAQ assistant, then posts the reply in the thread. |
 | `REMOVE_BROADCAST` | Removes a “also sent to channel” thread reply from the channel (keeps it in the thread). |
 | `REPOST_TO_THREAD_AND_DELETE` | Reposts the message to the thread with a custom message, then deletes it from the channel. |
 
@@ -158,7 +169,7 @@ If a placeholder is channel-specific and the channel isn’t in the map, the `de
 |----------|------|---------|
 | `dont-ask-to-ask-just-ask` | SLACK_POST | Encourage asking questions directly. |
 | `thread` | REMOVE_BROADCAST + SLACK_POST | Remove broadcasted reply, post thread reminder. |
-| `faq` | SLACK_POST | Post channel-specific FAQ link. |
+| `faq` | FAQ_ASSISTANT | Answer the reacted message with the Cloudflare FAQ assistant. |
 | `error-log-to-thread-please` | SLACK_POST | How to share error logs. |
 | `error-log-to-thread-and-delete` | REPOST_TO_THREAD_AND_DELETE | Move error log to thread, delete from channel. |
 | `no-screenshot` | SLACK_POST | Advise against code screenshots; link to guidelines. |
@@ -167,3 +178,21 @@ If a placeholder is channel-specific and the channel isn’t in the map, the `de
 | `ask-ai` | ASK_AI | Generate and post an AI reply in the thread. |
 
 To change behavior, edit `automator/config.yaml` and keep the same structure so the application stays compatible.
+
+## FAQ Assistant Integration
+
+Set `FAQ_ASSISTANT_URL` on both the router and automator Lambdas:
+
+```bash
+FAQ_ASSISTANT_URL=https://<cloudflare-worker>/ask
+```
+
+Set the same shared secret on the automator Lambda and the Cloudflare Worker:
+
+```bash
+FAQ_ASSISTANT_SHARED_SECRET=...
+```
+
+If `FAQ_ASSISTANT_URL` is unset on the router, app mentions are ignored. If it is set, any user can tag the bot and the router forwards the event to the automator. Reaction events are still forwarded only when the reacting user is an admin.
+
+The automator sends the shared secret as `x-faq-assistant-secret`; the Cloudflare Worker rejects `/ask` calls when its own `FAQ_ASSISTANT_SHARED_SECRET` is set and the header is missing or different.
