@@ -15,7 +15,7 @@ Its only job is to look at the incoming event and quickly decide where it should
 | Event | Routed to |
 |-------|-----------|
 | **Reaction added by admin** | Automator |
-| **App mention** when `FAQ_ASSISTANT_URL` is set | Automator / FAQ Assistant |
+| **App mention** | Automator / FAQ Assistant |
 | **Message event** | Moderator |
 | **Button click** (e.g. from an alert) | Moderator |
 
@@ -181,7 +181,7 @@ To change behavior, edit `automator/config.yaml` and keep the same structure so 
 
 ## FAQ Assistant Integration
 
-Set `FAQ_ASSISTANT_URL` on both the router and automator Lambdas:
+Set `FAQ_ASSISTANT_URL` on the automator Lambda:
 
 ```bash
 FAQ_ASSISTANT_URL=https://<cloudflare-worker>/ask
@@ -193,6 +193,6 @@ Set the same shared secret on the automator Lambda and the Cloudflare Worker:
 FAQ_ASSISTANT_SHARED_SECRET=...
 ```
 
-If `FAQ_ASSISTANT_URL` is unset on the router, app mentions are ignored. If it is set, any user can tag the bot and the router forwards the event to the automator. Reaction events are still forwarded only when the reacting user is an admin.
+Any user can tag the bot and the router forwards the event to the automator. If `FAQ_ASSISTANT_URL` is unset on the automator Lambda, the automator skips the FAQ assistant request. Reaction events are still forwarded only when the reacting user is an admin.
 
 The automator sends the shared secret as `x-faq-assistant-secret`; the Cloudflare Worker rejects `/ask` calls when its own `FAQ_ASSISTANT_SHARED_SECRET` is set and the header is missing or different.

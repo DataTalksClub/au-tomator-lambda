@@ -3,7 +3,6 @@ import os
 import sys
 import types
 import unittest
-from unittest.mock import patch
 import importlib.util
 
 
@@ -65,7 +64,7 @@ class TestRouterLambda(unittest.TestCase):
 
         self.assertEqual(fake_lambda_client.invocations, [])
 
-    def test_app_mention_routes_when_faq_assistant_url_is_set(self):
+    def test_app_mention_routes_to_automator_for_any_user(self):
         body = {
             'event': {
                 'type': 'app_mention',
@@ -75,8 +74,7 @@ class TestRouterLambda(unittest.TestCase):
             }
         }
 
-        with patch('router_lambda_function.FAQ_ASSISTANT_URL', 'https://worker.example.com'):
-            lambda_function.run(body)
+        lambda_function.run(body)
 
         self.assertEqual(len(fake_lambda_client.invocations), 1)
         self.assertEqual(
@@ -87,21 +85,6 @@ class TestRouterLambda(unittest.TestCase):
             json.loads(fake_lambda_client.invocations[0]['Payload']),
             body,
         )
-
-    def test_app_mention_is_ignored_when_faq_assistant_url_is_unset(self):
-        body = {
-            'event': {
-                'type': 'app_mention',
-                'user': 'U_NOT_ADMIN',
-                'channel': 'C06TEGTGM3J',
-                'text': '<@UFAQBOT> Can I still join?',
-            }
-        }
-
-        with patch('router_lambda_function.FAQ_ASSISTANT_URL', ''):
-            lambda_function.run(body)
-
-        self.assertEqual(fake_lambda_client.invocations, [])
 
 
 if __name__ == '__main__':

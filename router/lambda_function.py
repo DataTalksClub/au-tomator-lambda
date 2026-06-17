@@ -1,6 +1,5 @@
 import json
 import base64
-import os
 
 import boto3
 
@@ -9,7 +8,6 @@ lambda_client = boto3.client('lambda')
 
 
 admins = {'U01AXE0P5M3'}
-FAQ_ASSISTANT_URL = os.getenv('FAQ_ASSISTANT_URL', '').strip()
 
 
 def extract_body(event):
@@ -75,7 +73,7 @@ def run(body):
             Payload=json.dumps(body)
         )
 
-    if (event_type == 'app_mention') and FAQ_ASSISTANT_URL:
+    if event_type == 'app_mention':
         lambda_client.invoke(
             FunctionName='automator-process-reaction',
             InvocationType='Event',
