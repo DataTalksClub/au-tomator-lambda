@@ -86,6 +86,20 @@ class TestRouterLambda(unittest.TestCase):
             body,
         )
 
+    def test_message_event_is_ignored(self):
+        body = {
+            'event': {
+                'type': 'message',
+                'user': 'U_NOT_ADMIN',
+                'channel': 'C06TEGTGM3J',
+                'text': 'hello',
+            }
+        }
+
+        lambda_function.run(body)
+
+        self.assertEqual(fake_lambda_client.invocations, [])
+
 
 if __name__ == '__main__':
     unittest.main()

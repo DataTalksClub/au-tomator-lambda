@@ -80,14 +80,6 @@ def run(body):
             Payload=json.dumps(body)
         )
     
-    # Route message events to moderator lambda
-    if event_type == 'message':
-        lambda_client.invoke(
-            FunctionName='automator-message-moderator',
-            InvocationType='Event',
-            Payload=json.dumps(body)
-        )
-
     return {
         'statusCode': 200,
         'body': "Hello from lambda!"

@@ -16,7 +16,7 @@ Its only job is to look at the incoming event and quickly decide where it should
 |-------|-----------|
 | **Reaction added by admin** | Automator |
 | **App mention** | Automator / FAQ Assistant |
-| **Message event** | Moderator |
+| **Message event** | Disabled for now |
 | **Button click** (e.g. from an alert) | Moderator |
 
 The router and automator are separate on purpose: Slack expects a response within about 3 seconds. The router responds immediately and invokes the automator (or moderator) asynchronously, so longer work doesn’t time out.
