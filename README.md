@@ -196,3 +196,37 @@ FAQ_ASSISTANT_SHARED_SECRET=...
 Any user can tag the bot and the router forwards the event to the automator. If `FAQ_ASSISTANT_URL` is unset on the automator Lambda, the automator skips the FAQ assistant request. Reaction events are still forwarded only when the reacting user is an admin.
 
 The automator sends the shared secret as `x-faq-assistant-secret`; the Cloudflare Worker rejects `/ask` calls when its own `FAQ_ASSISTANT_SHARED_SECRET` is set and the header is missing or different.
+
+## Slack App Setup
+
+In Slack app settings, keep the Event Subscriptions request URL pointed at the router:
+
+```text
+https://vmnqlq0emg.execute-api.eu-west-1.amazonaws.com/slack
+```
+
+Under **Subscribe to bot events**, add:
+
+| Event | Scope |
+|-------|-------|
+| `app_mention` | `app_mentions:read` |
+| `reaction_added` | `reactions:read` |
+
+Do not put these under **Subscribe to events on behalf of users**. The router expects events delivered to the bot integration, not user-authorized event streams.
+
+Plain `message` events are disabled for now and are ignored by the router.
+
+The bot also needs to post answers and read reacted messages, so make sure the app has:
+
+```text
+chat:write
+channels:history
+```
+
+For private channels, also add:
+
+```text
+groups:history
+```
+
+After changing events or scopes, reinstall the Slack app and invite the bot to the course channels where it should answer mentions.
