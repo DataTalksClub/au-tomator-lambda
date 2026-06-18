@@ -1073,6 +1073,13 @@ class TestFaqAssistant(unittest.TestCase):
         self.assertEqual(lambda_function.format_faq_sources(None), '')
         self.assertEqual(lambda_function.format_faq_sources([]), '')
 
+    def test_format_faq_sources_heading_depends_on_found_answer(self):
+        sources = [{'source': 'faq', 'title': 'FAQ', 'url': 'https://datatalks.club/faq/x.html'}]
+        found = lambda_function.format_faq_sources(sources, found_answer=True)
+        not_found = lambda_function.format_faq_sources(sources, found_answer=False)
+        self.assertIn('*Sources:*', found)
+        self.assertIn('*You can check these for more information:*', not_found)
+
     @patch('automator_lambda_function.slack')
     @patch('automator_lambda_function.call_faq_assistant')
     def test_handle_app_mention_appends_sources(self, mock_call, mock_slack):

@@ -115,12 +115,16 @@ def post_faq_assistant_answer(channel, thread_ts, payload):
 
     message = answer.get('answer') or "I couldn't find an answer."
     message = slack.github_to_slack_markdown(message)
-    message += format_faq_sources(answer.get('sources'))
+    message += format_faq_sources(answer.get('sources'), answer.get('found_answer', True))
     slack.post_message_to_thread(channel, thread_ts, message)
 
 
-def format_faq_sources(sources):
-    """Render the FAQ assistant's structured sources as Slack mrkdwn links."""
+def format_faq_sources(sources, found_answer=True):
+    """Render the FAQ assistant's structured sources as Slack mrkdwn links.
+
+    When the assistant found an answer these are its citations; otherwise they are
+    suggested resources, so the heading changes accordingly.
+    """
     lines = [
         f"• <{source['url']}|{source.get('title') or source.get('source') or 'source'}>"
         for source in (sources or [])
@@ -128,7 +132,8 @@ def format_faq_sources(sources):
     ]
     if not lines:
         return ''
-    return '\n\n*Sources:*\n' + '\n'.join(lines)
+    heading = '*Sources:*' if found_answer else '*You can check these for more information:*'
+    return f'\n\n{heading}\n' + '\n'.join(lines)
 
 
 def handle_app_mention(event):
