@@ -115,7 +115,20 @@ def post_faq_assistant_answer(channel, thread_ts, payload):
 
     message = answer.get('answer') or "I couldn't find an answer."
     message = slack.github_to_slack_markdown(message)
+    message += format_faq_sources(answer.get('sources'))
     slack.post_message_to_thread(channel, thread_ts, message)
+
+
+def format_faq_sources(sources):
+    """Render the FAQ assistant's structured sources as Slack mrkdwn links."""
+    lines = [
+        f"• <{source['url']}|{source.get('title') or source.get('source') or 'source'}>"
+        for source in (sources or [])
+        if source.get('url')
+    ]
+    if not lines:
+        return ''
+    return '\n\n*Sources:*\n' + '\n'.join(lines)
 
 
 def handle_app_mention(event):

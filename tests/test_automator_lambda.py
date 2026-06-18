@@ -1054,6 +1054,48 @@ class TestFaqAssistant(unittest.TestCase):
             'See <https://datatalks.club/faq/|FAQ>.',
         )
 
+    def test_format_faq_sources_renders_slack_links(self):
+        out = lambda_function.format_faq_sources([
+            {'source': 'faq', 'title': 'Joining late',
+             'url': 'https://datatalks.club/faq/llm-zoomcamp.html#x'},
+            {'source': 'course-repo', 'title': 'Week 1 Homework',
+             'url': 'https://github.com/DataTalksClub/llm-zoomcamp/blob/main/hw.md'},
+            {'source': 'docs', 'title': 'No link', 'url': ''},  # skipped: no url
+        ])
+        self.assertIn('*Sources:*', out)
+        self.assertIn('<https://datatalks.club/faq/llm-zoomcamp.html#x|Joining late>', out)
+        self.assertIn(
+            '<https://github.com/DataTalksClub/llm-zoomcamp/blob/main/hw.md|Week 1 Homework>', out
+        )
+        self.assertNotIn('No link', out)
+
+    def test_format_faq_sources_empty(self):
+        self.assertEqual(lambda_function.format_faq_sources(None), '')
+        self.assertEqual(lambda_function.format_faq_sources([]), '')
+
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.call_faq_assistant')
+    def test_handle_app_mention_appends_sources(self, mock_call, mock_slack):
+        mock_call.return_value = {
+            'answer': 'Yes, you can still join.',
+            'sources': [{'source': 'faq', 'title': 'Joining',
+                         'url': 'https://datatalks.club/faq/llm-zoomcamp.html#abc'}],
+        }
+        mock_slack.github_to_slack_markdown.return_value = 'Yes, you can still join.'
+        event = {
+            'type': 'app_mention',
+            'channel': 'C06TEGTGM3J',
+            'text': '<@UFAQBOT> Can I still join?',
+            'ts': '1790000000.000100',
+        }
+
+        lambda_function.handle_app_mention(event)
+
+        posted = mock_slack.post_message_to_thread.call_args[0][2]
+        self.assertIn('Yes, you can still join.', posted)
+        self.assertIn('*Sources:*', posted)
+        self.assertIn('<https://datatalks.club/faq/llm-zoomcamp.html#abc|Joining>', posted)
+
     def test_faq_reaction_config_uses_faq_assistant(self):
         reaction_config = lambda_function.reaction_configs.get('faq')
         self.assertIsNotNone(reaction_config)
