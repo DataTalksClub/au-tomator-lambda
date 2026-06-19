@@ -8,7 +8,7 @@ import json
 os.environ['ADMIN_USER_ID'] = 'U_ADMIN'
 
 # Add moderator directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'moderator'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 import lambda_function
 

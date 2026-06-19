@@ -6,11 +6,11 @@ import importlib.util
 
 # Set environment before importing lambda_function
 os.environ['FAKE_DELETE'] = '1'
-config_path = os.path.join(os.path.dirname(__file__), '..', 'automator', 'config.yaml')
+config_path = os.path.join(os.path.dirname(__file__), '..', 'src', 'config.yaml')
 os.environ['CONFIG_FILE'] = config_path
 
 # Load the automator lambda_function directly without adding to path
-automator_lambda_path = os.path.join(os.path.dirname(__file__), '..', 'automator', 'lambda_function.py')
+automator_lambda_path = os.path.join(os.path.dirname(__file__), '..', 'src', 'lambda_function.py')
 spec = importlib.util.spec_from_file_location("automator_lambda_function", automator_lambda_path)
 lambda_function = importlib.util.module_from_spec(spec)
 
@@ -19,7 +19,7 @@ lambda_function = importlib.util.module_from_spec(spec)
 sys.modules['automator_lambda_function'] = lambda_function
 
 # Add automator to sys.path temporarily for imports within lambda_function
-automator_dir = os.path.join(os.path.dirname(__file__), '..', 'automator')
+automator_dir = os.path.join(os.path.dirname(__file__), '..', 'src')
 sys.path.insert(0, automator_dir)
 spec.loader.exec_module(lambda_function)
 sys.path.pop(0)

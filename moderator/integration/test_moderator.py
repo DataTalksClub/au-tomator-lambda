@@ -5,7 +5,7 @@ Integration test for message moderator with LocalStack.
 Prerequisites:
 1. Start LocalStack: docker-compose up -d
 2. Wait for LocalStack to be ready
-3. Run this test: python integration_tests/test_moderator.py
+3. Run this test: python integration/test_moderator.py
 """
 
 import os
@@ -23,7 +23,7 @@ os.environ['SLACK_TOKEN'] = 'test-token'
 os.environ['USER_SLACK_TOKEN'] = 'test-user-token'
 
 # Add moderator to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'moderator'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 import message_tracker
 

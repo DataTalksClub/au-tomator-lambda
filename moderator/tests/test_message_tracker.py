@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 import time
 
 # Add moderator directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'moderator'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 import message_tracker
 

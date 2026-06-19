@@ -20,7 +20,7 @@ fake_boto3 = types.SimpleNamespace(client=lambda service: fake_lambda_client)
 sys.modules['boto3'] = fake_boto3
 
 router_lambda_path = os.path.join(
-    os.path.dirname(__file__), '..', 'router', 'lambda_function.py'
+    os.path.dirname(__file__), '..', 'src', 'lambda_function.py'
 )
 spec = importlib.util.spec_from_file_location(
     'router_lambda_function', router_lambda_path

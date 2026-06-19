@@ -1,0 +1,36 @@
+name: Test Moderator
+
+# Moderator is parked (not deployed). Tests still run so it does not rot.
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'moderator/**'
+      - '.github/workflows/test-moderator.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'moderator/**'
+      - '.github/workflows/test-moderator.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: moderator
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: uv sync
+
+    - name: Run tests
+      run: uv run python -m unittest discover tests -v

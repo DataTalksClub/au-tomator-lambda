@@ -1,22 +1,28 @@
-name: Deploy Lambda Function
+name: Deploy Automator
 
 on:
   workflow_run:
-    workflows: ["Run Tests"]
+    workflows: ["Test Automator"]
     types:
       - completed
   workflow_dispatch:
 
+env:
+  AWS_REGION: eu-west-1
+  FUNCTION_NAME: automator-process-reaction
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # Only deploy when tests pass on main branch, or when manually triggered from main
+    # Deploy only when Test Automator passed on main, or when manually run from main.
     if: (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
-    
+    defaults:
+      run:
+        working-directory: automator
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Install uv
       uses: astral-sh/setup-uv@v3
       with:
@@ -27,17 +33,19 @@ jobs:
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: eu-west-1
-        
+        aws-region: ${{ env.AWS_REGION }}
+
     - name: Package Lambda function
-      run: |
-        bash package.sh
-        
+      run: bash scripts/package.sh
+
     - name: Deploy to AWS Lambda
-      run: |
-        bash deploy.sh
+      run: bash scripts/deploy.sh
 
     - name: Verify deployment
       run: |
-        aws lambda get-function --function-name automator-process-reaction --region eu-west-1 --query 'Configuration.LastModified' --output text
-        echo "✅ Lambda function updated successfully"
+        aws lambda get-function \
+          --function-name "$FUNCTION_NAME" \
+          --region "$AWS_REGION" \
+          --query 'Configuration.LastModified' \
+          --output text
+        echo "Automator Lambda function updated successfully"

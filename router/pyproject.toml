@@ -1,0 +1,19 @@
+[project]
+name = "router"
+version = "0.1.0"
+description = "Slack event router Lambda for DataTalks.Club."
+requires-python = ">=3.12"
+# No third-party runtime deps: boto3 is supplied by the Lambda runtime.
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "boto3>=1.34",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

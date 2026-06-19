@@ -1,6 +1,25 @@
 # Message Moderator Lambda
 
+> ⚠️ **Status: PARKED.** This project is not currently deployed — the router's
+> message-moderation route is disabled and there is no deploy workflow. The code
+> and tests are kept working (CI runs `Test Moderator`) so it can be revived. To
+> reactivate, re-enable the router route and add a `deploy-moderator.yml`
+> workflow mirroring `deploy-automator.yml`.
+
 This Lambda function monitors message rate in Slack channels and alerts administrators when users exceed the configured threshold.
+
+## Layout
+
+```
+moderator/
+├── src/                  # Lambda code (handler: lambda_function.lambda_handler)
+├── scripts/              # package.sh, deploy.sh
+├── tests/                # unit tests
+├── integration/          # LocalStack integration test
+├── docker-compose.yml    # LocalStack for the integration test
+├── pyproject.toml        # self-contained deps (uv)
+└── SLACK_SETUP.md
+```
 
 ## Features
 
@@ -35,13 +54,13 @@ The moderator consists of three main components:
 
 ```bash
 cd moderator
-bash package.sh
+bash scripts/package.sh
 ```
 
 ### Deploy to AWS
 
 ```bash
-bash deploy.sh
+bash scripts/deploy.sh
 ```
 
 ### Required AWS Resources
