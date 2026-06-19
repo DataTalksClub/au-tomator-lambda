@@ -25,15 +25,15 @@ jobs:
         working-directory: automator
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Install uv
-      uses: astral-sh/setup-uv@v3
+      uses: astral-sh/setup-uv@v7
       with:
         python-version: '3.12'
 
     - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
+      uses: aws-actions/configure-aws-credentials@v6
       with:
         role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
         aws-region: ${{ env.AWS_REGION }}
