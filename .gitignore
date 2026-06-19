@@ -3,6 +3,7 @@ package.zip
 .ipynb_checkpoints/
 __pycache__/
 .envrc
+.env
 venv/
 .venv/
 .vscode
