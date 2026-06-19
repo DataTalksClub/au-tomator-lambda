@@ -1,0 +1,35 @@
+version: 2
+updates:
+  # One entry per self-contained project (each has its own pyproject.toml + uv.lock).
+  - package-ecosystem: "uv"
+    directory: "/router"
+    schedule:
+      interval: "weekly"
+    groups:
+      router-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: "uv"
+    directory: "/automator"
+    schedule:
+      interval: "weekly"
+    groups:
+      automator-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: "uv"
+    directory: "/moderator"
+    schedule:
+      interval: "weekly"
+    groups:
+      moderator-deps:
+        patterns: ["*"]
+
+  # GitHub Actions used by the test/deploy workflows.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns: ["*"]
