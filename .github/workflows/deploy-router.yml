@@ -10,10 +10,14 @@ on:
 env:
   AWS_REGION: eu-west-1
   ROUTER_FUNCTION_NAME: ${{ vars.ROUTER_FUNCTION_NAME || 'slack-test' }}
+  DEPLOY_ROLE_ARN: arn:aws:iam::387546586013:role/automator-lambda-deploy
 
 jobs:
   deploy-router:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # request the OIDC token for AWS role assumption
+      contents: read
     # Deploy only when Test Router passed on main, or when manually run from main.
     if: (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     defaults:
@@ -26,8 +30,7 @@ jobs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Package router Lambda
