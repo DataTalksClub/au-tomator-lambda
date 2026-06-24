@@ -119,17 +119,27 @@ def post_faq_assistant_answer(channel, thread_ts, payload):
     slack.post_message_to_thread(channel, thread_ts, message)
 
 
+# Display labels for the FAQ assistant's structured `source` types.
+FAQ_SOURCE_LABELS = {'faq': 'FAQ', 'docs': 'docs', 'course-repo': 'repo'}
+
+
 def format_faq_sources(sources, found_answer=True):
     """Render the FAQ assistant's structured sources as Slack mrkdwn links.
 
     When the assistant found an answer these are its citations; otherwise they are
-    suggested resources, so the heading changes accordingly.
+    suggested resources, so the heading changes accordingly. Each line is prefixed
+    with the source type (FAQ / docs / repo) so the reader can tell how authoritative
+    it is.
     """
-    lines = [
-        f"• <{source['url']}|{source.get('title') or source.get('source') or 'source'}>"
-        for source in (sources or [])
-        if source.get('url')
-    ]
+    lines = []
+    for source in (sources or []):
+        if not source.get('url'):
+            continue
+        title = source.get('title') or source.get('source') or 'source'
+        kind = source.get('source')
+        label = FAQ_SOURCE_LABELS.get(kind, kind)
+        prefix = f'[{label}] ' if label else ''
+        lines.append(f"• {prefix}<{source['url']}|{title}>")
     if not lines:
         return ''
     heading = '*Sources:*' if found_answer else '*You can check these for more information:*'

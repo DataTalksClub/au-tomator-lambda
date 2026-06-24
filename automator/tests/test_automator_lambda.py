@@ -1149,5 +1149,44 @@ class TestFaqAssistant(unittest.TestCase):
         )
 
 
+class TestFormatFaqSources(unittest.TestCase):
+    """format_faq_sources prefixes each line with the source type."""
+
+    def test_labels_known_source_types(self):
+        sources = [
+            {'source': 'faq', 'title': 'Can I use TypeScript?', 'url': 'https://x/faq#1'},
+            {'source': 'docs', 'title': 'Project', 'url': 'https://x/docs'},
+            {'source': 'course-repo', 'title': 'README', 'url': 'https://x/repo'},
+        ]
+        result = lambda_function.format_faq_sources(sources, found_answer=True)
+        self.assertIn('*Sources:*', result)
+        self.assertIn('• [FAQ] <https://x/faq#1|Can I use TypeScript?>', result)
+        self.assertIn('• [docs] <https://x/docs|Project>', result)
+        self.assertIn('• [repo] <https://x/repo|README>', result)
+
+    def test_unknown_source_type_used_verbatim(self):
+        sources = [{'source': 'blog', 'title': 'Post', 'url': 'https://x/p'}]
+        result = lambda_function.format_faq_sources(sources)
+        self.assertIn('• [blog] <https://x/p|Post>', result)
+
+    def test_missing_source_type_has_no_prefix(self):
+        sources = [{'title': 'Post', 'url': 'https://x/p'}]
+        result = lambda_function.format_faq_sources(sources)
+        self.assertIn('• <https://x/p|Post>', result)
+
+    def test_not_found_changes_heading(self):
+        sources = [{'source': 'faq', 'title': 'T', 'url': 'https://x/f'}]
+        result = lambda_function.format_faq_sources(sources, found_answer=False)
+        self.assertIn('*You can check these for more information:*', result)
+
+    def test_sources_without_url_are_skipped(self):
+        sources = [{'source': 'faq', 'title': 'No link'}]
+        self.assertEqual(lambda_function.format_faq_sources(sources), '')
+
+    def test_empty_sources(self):
+        self.assertEqual(lambda_function.format_faq_sources(None), '')
+        self.assertEqual(lambda_function.format_faq_sources([]), '')
+
+
 if __name__ == '__main__':
     unittest.main()
