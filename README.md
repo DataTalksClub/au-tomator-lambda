@@ -209,10 +209,10 @@ If a placeholder is channel-specific and the channel isn’t in the map, the `de
 | Reaction | Type | Purpose |
 |----------|------|---------|
 | `dont-ask-to-ask-just-ask` | SLACK_POST | Encourage asking questions directly. |
+| `be-specific` | SLACK_POST | Ask for exact context, command, error text, and attempted fixes. |
 | `thread` | REMOVE_BROADCAST + SLACK_POST | Remove broadcasted reply, post thread reminder. |
 | `faq` | FAQ_ASSISTANT | Answer the reacted message with the Cloudflare FAQ assistant. |
-| `error-log-to-thread-please` | SLACK_POST | How to share error logs. |
-| `error-log-to-thread-and-delete` | REPOST_TO_THREAD_AND_DELETE | Move error log to thread, delete from channel. |
+| `error-log-to-thread-please` | REPOST_TO_THREAD_AND_DELETE | Move error log to thread, delete from channel. |
 | `no-screenshot` | SLACK_POST | Advise against code screenshots; link to guidelines. |
 | `shameless-rules` | DELETE_MESSAGE | Enforce shameless-promo rules; DM author. |
 | `jobs-rules` | DELETE_MESSAGE | Enforce job-posting rules; DM author. |

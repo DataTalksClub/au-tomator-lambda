@@ -44,6 +44,9 @@ CH_OTHER = 'C_OTHER'       # not in config -> no course / 'default' placeholder
 ASKING_QUESTIONS_URL = (
     'https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/'
 )
+ASKING_FOR_HELP_URL = (
+    'https://datatalks.club/docs/general/guidelines/asking-for-help/'
+)
 
 
 def reaction_event(reaction, channel=CH_DE, ts='1700000000.000100', user='UMOD'):
@@ -80,14 +83,45 @@ class TestPlaceholderSlackPost(unittest.TestCase):
 
     @patch('automator_lambda_function.slack')
     def test_no_screenshot_resolves_link_per_channel(self, mock_slack):
-        # Known course channel and an unknown channel (falls back to 'default').
-        for channel in [CH_DE, CH_OTHER]:
+        cases = [
+            (CH_DE, ASKING_QUESTIONS_URL),
+            (CH_OTHER, ASKING_FOR_HELP_URL),
+        ]
+        for channel, expected_url in cases:
             with self.subTest(channel=channel):
                 mock_slack.reset_mock()
                 deliver(reaction_event('no-screenshot', channel=channel))
                 mock_slack.post_message_thread.assert_called_once()
                 posted = mock_slack.post_message_thread.call_args[0][1]
-                self.assertIn(ASKING_QUESTIONS_URL, posted)
+                self.assertIn(expected_url, posted)
+
+
+class TestBeSpecificRouting(unittest.TestCase):
+    """be-specific points course channels to course guidance and others to general guidance."""
+
+    @patch('automator_lambda_function.slack')
+    def test_be_specific_resolves_copy_per_channel(self, mock_slack):
+        cases = [
+            (
+                CH_DE,
+                ASKING_QUESTIONS_URL,
+                'module, lesson, homework, or project step',
+            ),
+            (
+                CH_OTHER,
+                ASKING_FOR_HELP_URL,
+                'relevant context and environment',
+            ),
+        ]
+        for channel, expected_url, expected_context in cases:
+            with self.subTest(channel=channel):
+                mock_slack.reset_mock()
+                deliver(reaction_event('be-specific', channel=channel))
+                mock_slack.post_message_thread.assert_called_once()
+                posted = mock_slack.post_message_thread.call_args[0][1]
+                self.assertIn(expected_url, posted)
+                self.assertIn(expected_context, posted)
+                self.assertIn("it's not possible to help effectively", posted)
 
 
 class TestDeleteMessageRouting(unittest.TestCase):
@@ -129,7 +163,12 @@ class TestRepostPerChannel(unittest.TestCase):
 
     @patch('automator_lambda_function.slack')
     def test_error_log_reposts_original_message(self, mock_slack):
-        for channel in [CH_DE, CH_ML, CH_OTHER]:
+        cases = [
+            (CH_DE, ASKING_QUESTIONS_URL),
+            (CH_ML, ASKING_QUESTIONS_URL),
+            (CH_OTHER, ASKING_FOR_HELP_URL),
+        ]
+        for channel, expected_url in cases:
             with self.subTest(channel=channel):
                 mock_slack.reset_mock()
                 mock_slack.get_message_content.return_value = {
@@ -141,7 +180,7 @@ class TestRepostPerChannel(unittest.TestCase):
                 mock_slack.post_message_thread.assert_called_once()
                 posted = mock_slack.post_message_thread.call_args[0][1]
                 self.assertIn('here is my error log', posted)
-                self.assertIn(ASKING_QUESTIONS_URL, posted)
+                self.assertIn(expected_url, posted)
                 mock_slack.remove_message.assert_not_called()  # FAKE_DELETE
 
 

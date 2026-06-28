@@ -27,6 +27,32 @@ reactions:
     message: >
       Don't ask to ask: https://dontasktoask.com/
 
+  - reaction: be-specific
+    type: SLACK_POST
+    placeholders:
+      guide:
+        course-ml-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        course-data-engineering: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        course-mlops-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        course-llm-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        course-ai-dev-tools-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        course-stock-markets-analytics-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        default: https://datatalks.club/docs/general/guidelines/asking-for-help/
+      context:
+        course-ml-zoomcamp: the module, lesson, homework, or project step
+        course-data-engineering: the module, lesson, homework, or project step
+        course-mlops-zoomcamp: the module, lesson, homework, or project step
+        course-llm-zoomcamp: the module, lesson, homework, or project step
+        course-ai-dev-tools-zoomcamp: the module, lesson, homework, or project step
+        course-stock-markets-analytics-zoomcamp: the module, lesson, homework, or project step
+        default: the relevant context and environment
+    message: |
+      Please be more specific: include what you're trying to do, {context}, the exact command you ran, the full error message as text, and what you've already tried.
+
+      Without those details people can only guess, so it's not possible to help effectively.
+
+      Follow <{guide}|these recommendations> to make it easier for others to help you.
+
   - reaction: thread
     type: SLACK_POST
     message: >
@@ -61,7 +87,9 @@ reactions:
         course-data-engineering: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
         course-mlops-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
         course-llm-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
-        default: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        course-ai-dev-tools-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        course-stock-markets-analytics-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        default: https://datatalks.club/docs/general/guidelines/asking-for-help/
     message: |
       Removing the message from the channel to save space. Please move the error log to the thread.
 
@@ -81,7 +109,9 @@ reactions:
         course-data-engineering: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
         course-mlops-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
         course-llm-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
-        default: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        course-ai-dev-tools-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        course-stock-markets-analytics-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        default: https://datatalks.club/docs/general/guidelines/asking-for-help/
     message: |
       Please don't post screenshots or pictures of your code, they are very difficult to read.
 
