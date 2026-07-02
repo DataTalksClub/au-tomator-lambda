@@ -1103,6 +1103,49 @@ class TestFaqAssistant(unittest.TestCase):
         self.assertIn('*Sources:*', posted)
         self.assertIn('<https://datatalks.club/faq/llm-zoomcamp.html#abc|Joining>', posted)
 
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.call_faq_assistant')
+    def test_faq_assistant_failure_posts_error_without_raising(self, mock_call, mock_slack):
+        response = MagicMock()
+        response.status_code = 500
+        response.text = 'upstream exploded'
+        mock_call.side_effect = lambda_function.requests.exceptions.HTTPError(
+            '500 Server Error', response=response
+        )
+
+        lambda_function.post_faq_assistant_answer(
+            'C06TEGTGM3J',
+            '1790000000.000100',
+            {
+                'question': 'Can I still join?',
+                'scope': 'course',
+                'course': 'llm-zoomcamp',
+            },
+        )
+
+        mock_slack.github_to_slack_markdown.assert_not_called()
+        posted = mock_slack.post_message_to_thread.call_args[0][2]
+        self.assertIn('The FAQ assistant is currently not available.', posted)
+        self.assertIn('In the meantime, you can try to find the answer here:', posted)
+        self.assertIn('<https://datatalks.club/docs/courses/llm-zoomcamp/|Docs>', posted)
+        self.assertIn('<https://datatalks.club/faq/llm-zoomcamp.html|FAQ>', posted)
+        self.assertIn('<https://github.com/DataTalksClub/llm-zoomcamp|Course repo>', posted)
+        mock_slack.post_message_to_thread.assert_called_once_with(
+            'C06TEGTGM3J',
+            '1790000000.000100',
+            posted,
+        )
+
+    def test_faq_assistant_error_message_uses_generic_resources_without_course(self):
+        message = lambda_function.format_faq_assistant_error_message({
+            'question': 'How do I join Slack?',
+            'scope': 'docs',
+        })
+
+        self.assertIn('<https://datatalks.club/docs/|Docs>', message)
+        self.assertIn('<https://datatalks.club/faq/|FAQ>', message)
+        self.assertNotIn('Course repo', message)
+
     def test_faq_reaction_config_uses_faq_assistant(self):
         reaction_config = lambda_function.reaction_configs.get('faq')
         self.assertIsNotNone(reaction_config)

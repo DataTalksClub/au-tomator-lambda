@@ -18,6 +18,14 @@ CONFIG_FILE = os.getenv('CONFIG_FILE', 'config.yaml')
 FAQ_ASSISTANT_URL = os.getenv('FAQ_ASSISTANT_URL', '').strip()
 FAQ_ASSISTANT_SHARED_SECRET = os.getenv('FAQ_ASSISTANT_SHARED_SECRET', '')
 FAQ_ASSISTANT_TIMEOUT = int(os.getenv('FAQ_ASSISTANT_TIMEOUT', '55'))
+FAQ_ASSISTANT_ERROR_MESSAGE = (
+    'The FAQ assistant is currently not available. '
+    'In the meantime, you can try to find the answer here:'
+)
+FAQ_ASSISTANT_GENERIC_RESOURCES = {
+    'docs': 'https://datatalks.club/docs/',
+    'faq': 'https://datatalks.club/faq/',
+}
 
 
 
@@ -93,6 +101,33 @@ def call_faq_assistant(payload):
     return response.json()
 
 
+def faq_assistant_fallback_resources(payload):
+    course = payload.get('course')
+    if not course:
+        return FAQ_ASSISTANT_GENERIC_RESOURCES
+
+    return {
+        'docs': f'https://datatalks.club/docs/courses/{course}/',
+        'faq': f'https://datatalks.club/faq/{course}.html',
+        'repo': f'https://github.com/DataTalksClub/{course}',
+    }
+
+
+def format_faq_assistant_error_message(payload):
+    resources = faq_assistant_fallback_resources(payload)
+    lines = [
+        f"- <{resources['docs']}|Docs>",
+        f"- <{resources['faq']}|FAQ>",
+    ]
+    if resources.get('repo'):
+        lines.append(f"- <{resources['repo']}|Course repo>")
+
+    return (
+        f'{FAQ_ASSISTANT_ERROR_MESSAGE}\n\n'
+        + '\n'.join(lines)
+    )
+
+
 def post_faq_assistant_answer(channel, thread_ts, payload):
     if not channel or not thread_ts:
         logger.info('FAQ assistant request missing channel or ts')
@@ -109,7 +144,21 @@ def post_faq_assistant_answer(channel, thread_ts, payload):
         f"FAQ assistant request: scope={payload['scope']} "
         f"course={payload.get('course', '')}"
     )
-    answer = call_faq_assistant(payload)
+    try:
+        answer = call_faq_assistant(payload)
+    except requests.RequestException as exc:
+        response = getattr(exc, 'response', None)
+        status = getattr(response, 'status_code', None)
+        body = getattr(response, 'text', '') if response is not None else ''
+        logger.info(
+            f"FAQ assistant request failed: status={status} "
+            f"error={exc} body={body[:500]}"
+        )
+        slack.post_message_to_thread(
+            channel, thread_ts, format_faq_assistant_error_message(payload)
+        )
+        return
+
     if not answer:
         return
 
