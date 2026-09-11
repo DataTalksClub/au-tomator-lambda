@@ -68,10 +68,11 @@ def build_faq_assistant_payload(event):
     return build_faq_assistant_payload_for_question(
         event.get('channel'),
         event.get('text', ''),
+        user=event.get('user'),
     )
 
 
-def build_faq_assistant_payload_for_question(channel, question):
+def build_faq_assistant_payload_for_question(channel, question, user=None):
     course = course_for_channel(channel)
     payload = {
         'question': clean_app_mention_text(question),
@@ -80,6 +81,10 @@ def build_faq_assistant_payload_for_question(channel, question):
 
     if course:
         payload['course'] = course
+    if channel:
+        payload['channel'] = channel
+    if user:
+        payload['user'] = user
 
     return payload
 
@@ -217,7 +222,8 @@ def handle_faq_assistant_reaction(event, reaction_config):
         return
 
     _, original_message = slack.get_message(event)
-    payload = build_faq_assistant_payload_for_question(channel, original_message)
+    payload = build_faq_assistant_payload_for_question(
+        channel, original_message, user=event.get('user'))
     post_faq_assistant_answer(channel, thread_ts, payload)
     
 

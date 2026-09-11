@@ -984,6 +984,7 @@ class TestFaqAssistant(unittest.TestCase):
         event = {
             'type': 'app_mention',
             'channel': 'C06TEGTGM3J',
+            'user': 'U12345',
             'text': '<@UFAQBOT> Can I still join after the course started?',
         }
 
@@ -992,6 +993,8 @@ class TestFaqAssistant(unittest.TestCase):
         self.assertEqual(payload['question'], 'Can I still join after the course started?')
         self.assertEqual(payload['scope'], 'course')
         self.assertEqual(payload['course'], 'llm-zoomcamp')
+        self.assertEqual(payload['channel'], 'C06TEGTGM3J')
+        self.assertEqual(payload['user'], 'U12345')
 
     def test_build_docs_payload_from_unknown_channel(self):
         event = {
@@ -1005,6 +1008,8 @@ class TestFaqAssistant(unittest.TestCase):
         self.assertEqual(payload['question'], 'How do I join Slack?')
         self.assertEqual(payload['scope'], 'docs')
         self.assertNotIn('course', payload)
+        self.assertEqual(payload['channel'], 'C_UNKNOWN')
+        self.assertNotIn('user', payload)
 
     @patch('automator_lambda_function.requests.post')
     def test_call_faq_assistant_sends_shared_secret_header(self, mock_post):
@@ -1047,6 +1052,7 @@ class TestFaqAssistant(unittest.TestCase):
             'question': 'Can I still join?',
             'scope': 'course',
             'course': 'llm-zoomcamp',
+            'channel': 'C06TEGTGM3J',
         })
         mock_slack.post_message_to_thread.assert_called_once_with(
             'C06TEGTGM3J',
@@ -1184,6 +1190,7 @@ class TestFaqAssistant(unittest.TestCase):
             'question': 'Can I still join after the course started?',
             'scope': 'course',
             'course': 'llm-zoomcamp',
+            'channel': 'C06TEGTGM3J',
         })
         mock_slack.post_message_to_thread.assert_called_once_with(
             'C06TEGTGM3J',
