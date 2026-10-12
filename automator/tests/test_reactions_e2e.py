@@ -24,6 +24,8 @@ if MODNAME in sys.modules:
     lambda_function = sys.modules[MODNAME]
 else:
     os.environ['FAKE_DELETE'] = '1'
+    os.environ['AUDIT_ENABLED'] = '0'
+    os.environ['SPAM_TRACKER_ENABLED'] = '0'
     src_dir = os.path.join(os.path.dirname(__file__), '..', 'src')
     os.environ['CONFIG_FILE'] = os.path.join(src_dir, 'config.yaml')
     spec = importlib.util.spec_from_file_location(

@@ -9,6 +9,25 @@ lambda_client = boto3.client('lambda')
 
 admins = {'U01AXE0P5M3'}
 
+_SKIP_MESSAGE_SUBTYPES = {
+    'bot_message',
+    'message_changed',
+    'message_deleted',
+    'channel_join',
+    'channel_leave',
+    'channel_topic',
+    'channel_purpose',
+    'message_replied',
+}
+
+
+def _is_user_message(event):
+    if event.get('bot_id'):
+        return False
+    if event.get('subtype') in _SKIP_MESSAGE_SUBTYPES:
+        return False
+    return bool(event.get('user') and event.get('channel'))
+
 
 def extract_body(event):
     if 'body' not in event:
@@ -70,6 +89,13 @@ def run(body):
         )
 
     if event_type == 'app_mention':
+        lambda_client.invoke(
+            FunctionName='automator-process-reaction',
+            InvocationType='Event',
+            Payload=json.dumps(body)
+        )
+
+    if event_type == 'message' and _is_user_message(event):
         lambda_client.invoke(
             FunctionName='automator-process-reaction',
             InvocationType='Event',

@@ -42,7 +42,7 @@ Its only job is to look at the incoming event and quickly decide where it should
 |-------|-----------|
 | **Reaction added by admin** | Automator |
 | **App mention** | Automator / FAQ Assistant |
-| **Message event** | Disabled for now |
+| **Message event** (user posts, not bots/edits) | Automator spam tracker |
 | **Button click** (e.g. from an alert) | Acknowledged only |
 
 The router and automator are separate on purpose: Slack expects a response within about 3 seconds. The router responds immediately and invokes the automator asynchronously, so longer work doesn’t time out.
@@ -64,6 +64,13 @@ Examples:
 - **:rule-book:** (or similar) — Automator deletes the message and DMs the author that it violated community rules and was deleted.
 
 The automator can also send a relevant reply to the author of the message you reacted to, so they get clear feedback.
+
+If someone posts the **same or very similar message in multiple channels**, the
+automator folds those copies into a DynamoDB aggregate, waits until they go
+quiet (~3 minutes, scanned every 5 minutes), deletes them, and DMs Alexey the
+same deactivate workflow as `:ban-user:` (summary, then the user id as a
+separate message). Config: `spam_tracker` in `automator/src/config.yaml`.
+Slack must send `message` events to the router (`message.channels`).
 
 ---
 
@@ -146,6 +153,11 @@ Each entry defines an emoji (reaction name) and what the automator should do whe
 | `FAQ_ASSISTANT` | Calls the Cloudflare FAQ assistant, then posts the reply in the thread. |
 | `REMOVE_BROADCAST` | Removes a “also sent to channel” thread reply from the channel (keeps it in the thread). |
 | `REPOST_TO_THREAD_AND_DELETE` | Reposts the message to the thread with a custom message, then deletes it from the channel. |
+| `BAN_USER` | Deletes the user's recent messages (and thread replies), DMs innocent participants, and DMs the moderator a cleanup summary. |
+
+Every delete (`DELETE_MESSAGE`, `BAN_USER`, `REPOST_TO_THREAD_AND_DELETE`,
+`REMOVE_BROADCAST`) is recorded with the triggering reaction, the admin who
+reacted, and the deleted message text. See [docs/delete-audit.md](docs/delete-audit.md).
 
 #### Multiple handlers
 
@@ -180,6 +192,7 @@ If a placeholder is channel-specific and the channel isn’t in the map, the `de
 | `shameless-rules` | DELETE_MESSAGE | Enforce shameless-promo rules; DM author. |
 | `jobs-rules` | DELETE_MESSAGE | Enforce job-posting rules; DM author. |
 | `ask-ai` | ASK_AI | Generate and post an AI reply in the thread. |
+| `ban-user` | BAN_USER | Wipe the author's recent messages and DM the moderator a cleanup summary. |
 
 To change behavior, edit `automator/src/config.yaml` and keep the same structure so the application stays compatible.
 
