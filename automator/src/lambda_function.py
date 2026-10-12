@@ -10,6 +10,8 @@ import yaml
 import util
 import groqu
 import slack
+import audit
+import spam
 from logs import logger
 
 
@@ -265,11 +267,17 @@ def handle_remove_broadcast(event, reaction_config):
     if is_broadcasted_reply:
         # Remove the broadcasted message from the channel
         # (it will still remain in the thread)
-        if FAKE_DELETE:
-            logger.info(f"FAKE_DELETE broadcasted message for {channel} {ts}")
-        else:
-            slack.remove_message(channel, ts)
+        ok = _delete_message(channel, ts)
         logger.info(f"Removed broadcasted message from channel {channel} (kept in thread)")
+        _record_delete_action(
+            event,
+            'REMOVE_BROADCAST',
+            [_deleted_entry(
+                channel, ts, message_details.get('user'),
+                message_details.get('text', ''), 'broadcast', ok,
+            )],
+            target_user_id=message_details.get('user'),
+        )
     else:
         logger.info(f"Message {ts} is not a broadcasted reply, skipping removal")
 
@@ -287,14 +295,16 @@ def handle_delete_message(event, reaction_config):
         return
 
     user = message_details.get('user')
-    original_message = message_details.get('text', '')
+    original_message_raw = message_details.get('text', '')
     # Escape curly braces in user message to avoid format string issues
-    original_message = original_message.replace('{', '{{').replace('}', '}}')
+    original_message = original_message_raw.replace('{', '{{').replace('}', '}}')
     
     # Skip if there's no user (e.g., bot message or deleted message)
     if not user:
         logger.info(f"Message has no user for {channel} {ts}")
         return
+
+    deleted_messages = []
     
     # Handle thread messages if thread_message is configured
     thread_message_pattern = reaction_config.get('thread_message')
@@ -322,11 +332,11 @@ def handle_delete_message(event, reaction_config):
                 if thread_dm:
                     slack.send_dm(reply_user, thread_dm)
                 
-                # Delete the thread reply
-                if FAKE_DELETE:
-                    logger.info(f"FAKE_DELETE thread reply for {channel} {reply_ts}")
-                else:
-                    slack.remove_message(channel, reply_ts)
+                ok = _delete_message(channel, reply_ts)
+                deleted_messages.append(_deleted_entry(
+                    channel, reply_ts, reply_user, reply.get('text', ''),
+                    'reply', ok,
+                ))
     
     # Now handle the parent message
     message_pattern = reaction_config['message']
@@ -345,11 +355,16 @@ def handle_delete_message(event, reaction_config):
     if message_dm:
         slack.send_dm(user, message_dm)
     
-    # Delete the parent message
-    if FAKE_DELETE:
-        logger.info(f"FAKE_DELETE for {channel} {ts}")
-    else:
-        slack.remove_message(channel, ts)
+    ok = _delete_message(channel, ts)
+    deleted_messages.append(_deleted_entry(
+        channel, ts, user, original_message_raw, 'parent', ok,
+    ))
+    _record_delete_action(
+        event,
+        'DELETE_MESSAGE',
+        deleted_messages,
+        target_user_id=user,
+    )
 
 
 def handle_ask_ai(event, reaction_config):
@@ -423,12 +438,40 @@ def handle_repost_to_thread_and_delete(event, reaction_config):
     slack.post_message_thread(event, thread_message)
     logger.info(f"Reposted message to thread for {channel} {ts}")
     
-    # Delete the original message from the channel
-    if FAKE_DELETE:
-        logger.info(f"FAKE_DELETE for {channel} {ts}")
-    else:
-        slack.remove_message(channel, ts)
+    ok = _delete_message(channel, ts)
     logger.info(f"Deleted original message from channel {channel} (kept in thread)")
+    _record_delete_action(
+        event,
+        'REPOST_TO_THREAD_AND_DELETE',
+        [_deleted_entry(channel, ts, user, original_message, 'parent', ok)],
+        target_user_id=user,
+    )
+
+
+def _deleted_entry(channel, ts, user=None, text='', kind='parent', ok=True):
+    return {
+        'channel': channel,
+        'ts': ts,
+        'user': user,
+        'text': text,
+        'kind': kind,
+        'ok': ok,
+        'fake': FAKE_DELETE,
+    }
+
+
+def _record_delete_action(event, action_type, deleted_messages, **kwargs):
+    try:
+        audit.record_delete_action(
+            event,
+            action_type,
+            deleted_messages,
+            channel_name=get_channel_name((event.get('item') or {}).get('channel')),
+            fake_delete=FAKE_DELETE,
+            **kwargs,
+        )
+    except Exception as exc:
+        logger.info(f"delete audit failed: {exc}")
 
 
 def _delete_message(channel, ts):
@@ -480,7 +523,7 @@ def _format_reply_notification(template, reply_user, channel, reply_text):
 
 
 def _format_admin_summary(template, target_user_id, user_info, parent_deleted,
-                         replies_deleted, admin_url):
+                         replies_deleted, admin_url, extra_values=None):
     profile = (user_info or {}).get('profile', {})
     updated_ts = (user_info or {}).get('updated')
     updated_str = datetime.utcfromtimestamp(updated_ts).strftime('%Y-%m-%d') if updated_ts else 'unknown'
@@ -496,6 +539,8 @@ def _format_admin_summary(template, target_user_id, user_info, parent_deleted,
         'thread_deleted_count': replies_deleted,
         'admin_url': admin_url,
     }
+    if extra_values:
+        values.update(extra_values)
     return template.format(**values)
 
 
@@ -528,6 +573,214 @@ def _build_admin_summary_blocks(summary, target_user_id, admin_url):
         })
 
     return blocks
+
+
+def _cleanup_user_message_matches(matches, target_user_id, reply_template):
+    deleted = set()
+    parent_deleted = 0
+    replies_deleted = 0
+    deleted_messages = []
+
+    for msg in matches:
+        msg_channel = (msg.get('channel') or {}).get('id')
+        msg_ts = msg.get('ts')
+        if not msg_channel or not msg_ts:
+            continue
+
+        thread_ts = msg.get('thread_ts')
+        is_parent = (not thread_ts) or (thread_ts == msg_ts)
+
+        if is_parent:
+            for reply in slack.get_thread_replies(msg_channel, msg_ts):
+                reply_ts = reply['ts']
+                reply_user = reply.get('user')
+                key = (msg_channel, reply_ts)
+                if key in deleted:
+                    continue
+
+                if reply_user and reply_user != target_user_id and reply_template:
+                    notification = _format_reply_notification(
+                        reply_template, reply_user, msg_channel,
+                        reply.get('text', '')
+                    )
+                    slack.send_dm(reply_user, notification)
+
+                ok = _delete_message(msg_channel, reply_ts)
+                deleted_messages.append(_deleted_entry(
+                    msg_channel, reply_ts, reply_user, reply.get('text', ''),
+                    'reply', ok,
+                ))
+                if ok:
+                    deleted.add(key)
+                    replies_deleted += 1
+
+        key = (msg_channel, msg_ts)
+        if key in deleted:
+            continue
+        kind = 'parent' if is_parent else 'reply'
+        ok = _delete_message(msg_channel, msg_ts)
+        deleted_messages.append(_deleted_entry(
+            msg_channel, msg_ts, target_user_id, msg.get('text', ''),
+            kind, ok,
+        ))
+        if ok:
+            deleted.add(key)
+            parent_deleted += 1
+
+    return parent_deleted, replies_deleted, deleted_messages
+
+
+def _notify_admins_of_cleanup(admin_ids, admin_template, target_user_id,
+                              user_info, parent_deleted, replies_deleted,
+                              extra_values=None):
+    if not admin_template or not admin_ids:
+        return
+    admin_url = (config.get('workspace') or {}).get('admin_users_url', '')
+    summary = _format_admin_summary(
+        admin_template, target_user_id, user_info,
+        parent_deleted, replies_deleted, admin_url, extra_values=extra_values,
+    )
+    blocks = _build_admin_summary_blocks(summary, target_user_id, admin_url)
+    for admin_id in admin_ids:
+        slack.send_dm_blocks(admin_id, summary, blocks)
+        slack.send_dm(admin_id, target_user_id)
+
+
+def _tracked_to_search_match(entry):
+    match = {
+        'channel': {'id': entry.get('channel')},
+        'ts': entry.get('ts'),
+        'text': entry.get('text') or '',
+    }
+    thread_ts = entry.get('thread_ts')
+    if thread_ts:
+        match['thread_ts'] = thread_ts
+    return match
+
+
+def flush_cross_channel_spam(payload, *, now=None, store=None):
+    """Wipe a quiet cross-channel spam session and DM admins like :ban-user:."""
+    user_id = payload.get('user_id')
+    fp = payload.get('fingerprint')
+    if not user_id or not fp:
+        return
+
+    hooks = store or {}
+    load = hooks.get('load_session') or spam.load_session
+    delete = hooks.get('delete_session') or spam.delete_session
+
+    try:
+        item = load(user_id, fp)
+    except Exception as exc:
+        logger.info(f"spam flush load failed: {exc}")
+        return
+
+    if not item:
+        logger.info(f"spam flush: no session user={user_id} fp={fp}")
+        return
+    if item.get('status') == 'done':
+        return
+
+    now = now if now is not None else time.time()
+    quiet = spam.quiet_seconds(config)
+    last_seen = float(item.get('last_seen') or 0)
+    if last_seen and (now - last_seen) < quiet - 1:
+        logger.info(f"spam flush: still posting user={user_id}")
+        return
+
+    if user_id in set(config.get('admins', [])):
+        logger.info(f"spam flush: refusing admin {user_id}")
+        return
+
+    spam_cfg = spam.tracker_config(config)
+    ban_cfg = reaction_configs.get('ban-user') or {}
+    reply_template = spam_cfg.get('reply_message') or ban_cfg.get('reply_message')
+    admin_template = spam_cfg.get('admin_message') or ban_cfg.get('admin_message')
+    lookback_hours = int(spam_cfg.get('lookback_hours') or ban_cfg.get('lookback_hours') or 24)
+    threshold = spam.similarity_threshold(config)
+    canonical = item.get('canonical_text') or ''
+
+    user_info = slack.get_user_info(user_id) or {}
+    username = user_info.get('name') or (user_info.get('profile') or {}).get('display_name')
+
+    matches = []
+    seen = set()
+    for entry in item.get('messages') or []:
+        match = _tracked_to_search_match(entry)
+        key = _message_key(match)
+        if None in key or key in seen:
+            continue
+        matches.append(match)
+        seen.add(key)
+
+    if username:
+        pad_days = lookback_hours // 24 + 1
+        after_date = (datetime.utcnow() - timedelta(days=pad_days)).strftime('%Y-%m-%d')
+        cutoff_ts = now - lookback_hours * 3600
+        for found in slack.search_user_messages(username, after_date):
+            if float(found.get('ts') or 0) < cutoff_ts:
+                continue
+            if not spam.is_similar(found.get('text') or '', canonical, threshold):
+                continue
+            key = _message_key(found)
+            if key in seen:
+                continue
+            matches.append(found)
+            seen.add(key)
+
+    parent_deleted, replies_deleted, deleted_messages = (
+        _cleanup_user_message_matches(matches, user_id, reply_template)
+    )
+
+    first = (item.get('messages') or [{}])[0]
+    audit_event = {
+        'user': 'spam-tracker',
+        'reaction': 'cross-channel-spam',
+        'event_ts': str(now),
+        'item': {
+            'channel': first.get('channel'),
+            'ts': first.get('ts'),
+        },
+        'item_user': user_id,
+    }
+    channels = sorted(spam.unique_channels(item.get('messages') or []))
+    _record_delete_action(
+        audit_event,
+        'CROSS_CHANNEL_SPAM',
+        deleted_messages,
+        target_user_id=user_id,
+        target_user={
+            'id': user_id,
+            'name': username,
+            'display_name': (user_info.get('profile') or {}).get('display_name') or '',
+            'real_name': (user_info.get('profile') or {}).get('real_name') or '',
+            'email': (user_info.get('profile') or {}).get('email') or '',
+        },
+        extra={
+            'lookback_hours': lookback_hours,
+            'parent_deleted': parent_deleted,
+            'replies_deleted': replies_deleted,
+            'channel_count': len(channels),
+            'fingerprint': fp,
+        },
+    )
+
+    admin_ids = spam_cfg.get('admin_users') or config.get('admins') or []
+    channel_list = ' '.join(f'<#{cid}>' for cid in channels)
+    _notify_admins_of_cleanup(
+        admin_ids, admin_template, user_id, user_info,
+        parent_deleted, replies_deleted,
+        extra_values={
+            'channel_count': len(channels),
+            'channel_list': channel_list,
+            'sample_text': canonical[:500],
+        },
+    )
+
+    try:
+        delete(user_id, fp)
+    except Exception as exc:
+        logger.info(f"spam flush delete session failed: {exc}")
 
 
 def handle_ban_user(event, reaction_config):
@@ -586,55 +839,36 @@ def handle_ban_user(event, reaction_config):
             seen.add(key)
 
     reply_template = reaction_config.get('reply_message')
-    deleted = set()
-    parent_deleted = 0
-    replies_deleted = 0
+    parent_deleted, replies_deleted, deleted_messages = (
+        _cleanup_user_message_matches(matches, target_user_id, reply_template)
+    )
 
-    for msg in matches:
-        msg_channel = (msg.get('channel') or {}).get('id')
-        msg_ts = msg.get('ts')
-        if not msg_channel or not msg_ts:
-            continue
-
-        thread_ts = msg.get('thread_ts')
-        is_parent = (not thread_ts) or (thread_ts == msg_ts)
-
-        if is_parent:
-            for reply in slack.get_thread_replies(msg_channel, msg_ts):
-                reply_ts = reply['ts']
-                reply_user = reply.get('user')
-                key = (msg_channel, reply_ts)
-                if key in deleted:
-                    continue
-
-                if reply_user and reply_user != target_user_id and reply_template:
-                    notification = _format_reply_notification(
-                        reply_template, reply_user, msg_channel,
-                        reply.get('text', '')
-                    )
-                    slack.send_dm(reply_user, notification)
-
-                if _delete_message(msg_channel, reply_ts):
-                    deleted.add(key)
-                    replies_deleted += 1
-
-        key = (msg_channel, msg_ts)
-        if key in deleted:
-            continue
-        if _delete_message(msg_channel, msg_ts):
-            deleted.add(key)
-            parent_deleted += 1
+    _record_delete_action(
+        event,
+        'BAN_USER',
+        deleted_messages,
+        target_user_id=target_user_id,
+        target_user={
+            'id': target_user_id,
+            'name': username,
+            'display_name': (user_info.get('profile') or {}).get('display_name') or '',
+            'real_name': (user_info.get('profile') or {}).get('real_name') or '',
+            'email': (user_info.get('profile') or {}).get('email') or '',
+        },
+        extra={
+            'lookback_hours': lookback_hours,
+            'parent_deleted': parent_deleted,
+            'replies_deleted': replies_deleted,
+            'search_match_count': len(search_matches),
+        },
+    )
 
     admin_template = reaction_config.get('admin_message')
     if admin_template and moderator:
-        admin_url = (config.get('workspace') or {}).get('admin_users_url', '')
-        summary = _format_admin_summary(
-            admin_template, target_user_id, user_info,
-            parent_deleted, replies_deleted, admin_url
+        _notify_admins_of_cleanup(
+            [moderator], admin_template, target_user_id, user_info,
+            parent_deleted, replies_deleted,
         )
-        blocks = _build_admin_summary_blocks(summary, target_user_id, admin_url)
-        slack.send_dm_blocks(moderator, summary, blocks)
-        slack.send_dm(moderator, target_user_id)
 
 
 action_handlers = {
@@ -691,10 +925,44 @@ def run(body):
         process_reaction(body, event)
         return
 
+    if event_type == 'message':
+        spam.ingest_message(event, config)
+        return
+
     logger.info(f'unsupported event type: {event_type}')
 
 
+def flush_quiet_spam_sessions(*, now=None, store=None):
+    """Scheduled scan: flush ready aggregates that have been quiet long enough."""
+    now = now if now is not None else time.time()
+    cutoff = int(now) - spam.quiet_seconds(config)
+    hooks = store or {}
+    list_ready = hooks.get('list_ready_sessions') or spam.list_ready_sessions
+    try:
+        items = list_ready(cutoff)
+    except Exception as exc:
+        logger.info(f"spam scan load failed: {exc}")
+        return
+    logger.info(f"spam scan: {len(items)} quiet aggregate(s) cutoff={cutoff}")
+    for item in items:
+        flush_cross_channel_spam(
+            {
+                'user_id': item.get('user_id'),
+                'fingerprint': item.get('fingerprint'),
+            },
+            now=now,
+            store=store,
+        )
+
+
 def lambda_handler(event, context):
+    if isinstance(event, dict) and event.get('action') == 'spam_quiet_scan':
+        flush_quiet_spam_sessions()
+        return {
+            'statusCode': 200,
+            'body': "done"
+        }
+
     run(event)
     return {
         'statusCode': 200,

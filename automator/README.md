@@ -14,6 +14,15 @@ mentions. The router invokes it asynchronously:
 See the top-level [README](../README.md) for the configuration reference
 (`src/config.yaml`) and the FAQ assistant setup.
 
+Delete / ban-user actions are recorded (trigger, target user, message text)
+in DynamoDB + S3. See [docs/delete-audit.md](../docs/delete-audit.md). Query
+them with `/delete-audit`.
+
+Cross-channel copy-paste spam is pre-aggregated in DynamoDB (`spam.py`). A
+5-minute EventBridge scan deletes quiet sessions and DMs Alexey the same
+deactivate flow as `:ban-user:`. Requires `message.channels` on the Slack app
+and the Dynamo/EventBridge resources in `aws-infra/main/automator`.
+
 ## Layout
 
 ```

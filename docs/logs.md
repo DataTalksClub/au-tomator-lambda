@@ -11,6 +11,15 @@ The automator lambda logs are stored in:
 
 ### Using the "my" profile
 
+The default credentials on this host go through AWS Gate. If Gate is closed
+(`HTTP 403`), open it (phone pairing) or use a profile that can read
+CloudWatch. A `my` profile is documented below but may not exist on every
+machine.
+
+Delete actions (who reacted, which emoji, which channel/ts, and — after the
+audit landed — the deleted message text) are documented in
+[delete-audit.md](delete-audit.md).
+
 The default credentials only allow lambda deployment. Use the `my` profile for logs:
 
 ```bash

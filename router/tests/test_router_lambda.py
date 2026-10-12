@@ -86,13 +86,47 @@ class TestRouterLambda(unittest.TestCase):
             body,
         )
 
-    def test_message_event_is_ignored(self):
+    def test_user_message_routes_to_automator(self):
         body = {
             'event': {
                 'type': 'message',
                 'user': 'U_NOT_ADMIN',
                 'channel': 'C06TEGTGM3J',
                 'text': 'hello',
+                'ts': '1.0',
+            }
+        }
+
+        lambda_function.run(body)
+
+        self.assertEqual(len(fake_lambda_client.invocations), 1)
+        self.assertEqual(
+            fake_lambda_client.invocations[0]['FunctionName'],
+            'automator-process-reaction',
+        )
+
+    def test_bot_message_is_ignored(self):
+        body = {
+            'event': {
+                'type': 'message',
+                'subtype': 'bot_message',
+                'bot_id': 'B123',
+                'channel': 'C06TEGTGM3J',
+                'text': 'hello',
+            }
+        }
+
+        lambda_function.run(body)
+
+        self.assertEqual(fake_lambda_client.invocations, [])
+
+    def test_message_changed_is_ignored(self):
+        body = {
+            'event': {
+                'type': 'message',
+                'subtype': 'message_changed',
+                'user': 'U_NOT_ADMIN',
+                'channel': 'C06TEGTGM3J',
             }
         }
 

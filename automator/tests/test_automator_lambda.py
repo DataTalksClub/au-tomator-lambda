@@ -6,6 +6,8 @@ import importlib.util
 
 # Set environment before importing lambda_function
 os.environ['FAKE_DELETE'] = '1'
+os.environ['AUDIT_ENABLED'] = '0'
+os.environ['SPAM_TRACKER_ENABLED'] = '0'
 config_path = os.path.join(os.path.dirname(__file__), '..', 'src', 'config.yaml')
 os.environ['CONFIG_FILE'] = config_path
 
@@ -975,6 +977,226 @@ class TestBanUser(unittest.TestCase):
             lambda_function.action_handlers['BAN_USER'],
             lambda_function.handle_ban_user,
         )
+
+
+class TestDeleteAudit(unittest.TestCase):
+    """Delete handlers record what was removed and what triggered it."""
+
+    @patch('automator_lambda_function.audit.record_delete_action')
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.util')
+    def test_delete_message_records_parent_and_replies(
+        self, mock_util, mock_slack, mock_audit
+    ):
+        mock_slack.get_message_content.return_value = {
+            'user': 'U_PARENT',
+            'text': 'spam parent that broke the rules',
+        }
+        mock_slack.get_thread_replies.return_value = [
+            {'user': 'U_REPLY', 'ts': '1234567890.123457', 'text': 'a reply'},
+        ]
+        mock_util.format_message.return_value = 'dm'
+        event = {
+            'user': 'UMOD',
+            'item': {'channel': 'C123456', 'ts': '1234567890.123456'},
+            'reaction': 'delete',
+            'event_ts': '1234567891.000000',
+        }
+        reaction_config = {
+            'message': 'removed',
+            'thread_message': 'reply removed',
+            'type': 'DELETE_MESSAGE',
+        }
+
+        lambda_function.handle_delete_message(event, reaction_config)
+
+        mock_audit.assert_called_once()
+        args, kwargs = mock_audit.call_args
+        self.assertEqual(args[0], event)
+        self.assertEqual(args[1], 'DELETE_MESSAGE')
+        deleted = args[2]
+        self.assertEqual(
+            {(m['channel'], m['ts'], m['user'], m['kind']) for m in deleted},
+            {
+                ('C123456', '1234567890.123457', 'U_REPLY', 'reply'),
+                ('C123456', '1234567890.123456', 'U_PARENT', 'parent'),
+            },
+        )
+        parent = next(m for m in deleted if m['kind'] == 'parent')
+        self.assertEqual(parent['text'], 'spam parent that broke the rules')
+        self.assertEqual(kwargs['target_user_id'], 'U_PARENT')
+
+    @patch('automator_lambda_function.audit.record_delete_action')
+    @patch('automator_lambda_function.slack')
+    def test_ban_user_records_trigger_and_every_deleted_message(
+        self, mock_slack, mock_audit
+    ):
+        mock_slack.get_message_content.return_value = {
+            'user': 'U_SPAMMER',
+            'text': 'spam message',
+        }
+        mock_slack.get_user_info.return_value = {
+            'id': 'U_SPAMMER',
+            'name': 'spammer',
+            'profile': {
+                'display_name': 'Spammer',
+                'real_name': 'Spam McSpamface',
+                'email': 'spam@example.com',
+            },
+        }
+        mock_slack.search_user_messages.return_value = [
+            {
+                'channel': {'id': 'C_AAA'},
+                'ts': '1234567890.000100',
+                'text': 'spam parent',
+            },
+            {
+                'channel': {'id': 'C_BBB'},
+                'ts': '1234567890.000200',
+                'thread_ts': '1234567890.000150',
+                'text': 'spam reply',
+            },
+        ]
+        mock_slack.get_thread_replies.return_value = [
+            {'user': 'U_VICTIM', 'ts': '1234567890.000101', 'text': 'innocent reply'},
+            {'user': 'U_SPAMMER', 'ts': '1234567890.000102', 'text': 'spammer follow-up'},
+        ]
+        event = {
+            'user': 'UMOD',
+            'item': {'channel': 'C_AAA', 'ts': '1234567890.000100'},
+            'reaction': 'ban-user',
+            'event_ts': '1234567891.000000',
+        }
+
+        with patch('automator_lambda_function.time.time', return_value=1234567890.0 + 1000), \
+             patch('automator_lambda_function.FAKE_DELETE', False):
+            lambda_function.handle_ban_user(event, self._ban_config())
+
+        mock_audit.assert_called_once()
+        args, kwargs = mock_audit.call_args
+        self.assertEqual(args[0]['user'], 'UMOD')
+        self.assertEqual(args[0]['reaction'], 'ban-user')
+        self.assertEqual(args[1], 'BAN_USER')
+        deleted = args[2]
+        self.assertEqual(
+            {(m['channel'], m['ts'], m['text']) for m in deleted},
+            {
+                ('C_AAA', '1234567890.000101', 'innocent reply'),
+                ('C_AAA', '1234567890.000102', 'spammer follow-up'),
+                ('C_AAA', '1234567890.000100', 'spam message'),
+                ('C_BBB', '1234567890.000200', 'spam reply'),
+            },
+        )
+        self.assertEqual(kwargs['target_user_id'], 'U_SPAMMER')
+        self.assertEqual(kwargs['target_user']['email'], 'spam@example.com')
+        self.assertEqual(kwargs['extra']['parent_deleted'], 2)
+        self.assertEqual(kwargs['extra']['replies_deleted'], 2)
+
+    @patch('automator_lambda_function.audit.record_delete_action')
+    @patch('automator_lambda_function.slack')
+    def test_ban_user_does_not_audit_when_refusing_admin(
+        self, mock_slack, mock_audit
+    ):
+        mock_slack.get_message_content.return_value = {
+            'user': 'U01AXE0P5M3',
+            'text': 'whatever',
+        }
+        event = {
+            'user': 'UMOD',
+            'item': {'channel': 'C_AAA', 'ts': '1234567890.000100'},
+            'reaction': 'ban-user',
+        }
+        lambda_function.handle_ban_user(event, self._ban_config())
+        mock_audit.assert_not_called()
+
+    def _ban_config(self):
+        return {
+            'lookback_hours': 24,
+            'reply_message': 'Hi <@{user}>: {user_message}',
+            'admin_message': (
+                "User: <@{target_user}>\n"
+                "ID: {target_user_id}\n"
+                "Deleted: {deleted_count} parents, {thread_deleted_count} replies\n"
+                "Admin: {admin_url}"
+            ),
+        }
+
+
+class TestCrossChannelSpam(unittest.TestCase):
+    def _session(self, last_seen=1000):
+        text = (
+            'Get certified in data engineering today, limited offer, '
+            'click https://spam.example/join now!!!'
+        )
+        return {
+            'pk': 'USER#U_SPAMMER',
+            'sk': 'FP#abc',
+            'user_id': 'U_SPAMMER',
+            'fingerprint': 'abc',
+            'canonical_text': text,
+            'last_seen': last_seen,
+            'gsi1pk': 'ready',
+            'gsi1sk': last_seen,
+            'channel_count': 2,
+            'status': 'collecting',
+            'messages': [
+                {'channel': 'C1', 'ts': '1.0', 'text': text},
+                {'channel': 'C2', 'ts': '2.0', 'text': text},
+            ],
+        }
+
+    @patch('automator_lambda_function.audit.record_delete_action')
+    @patch('automator_lambda_function.slack')
+    def test_flush_deletes_and_dms_admin_id_separately(self, mock_slack, mock_audit):
+        session = self._session()
+        store = {
+            'load_session': lambda user_id, fp: session,
+            'delete_session': lambda user_id, fp: store.setdefault('deleted', (user_id, fp)),
+        }
+        mock_slack.get_user_info.return_value = {
+            'id': 'U_SPAMMER',
+            'name': 'spammer',
+            'profile': {
+                'display_name': 'Spammer',
+                'real_name': 'Spam Person',
+                'email': 'spam@example.com',
+            },
+        }
+        mock_slack.search_user_messages.return_value = []
+        mock_slack.get_thread_replies.return_value = []
+
+        with patch('automator_lambda_function.FAKE_DELETE', False):
+            lambda_function.flush_cross_channel_spam(
+                {'user_id': 'U_SPAMMER', 'fingerprint': 'abc'},
+                now=1000 + 180,
+                store=store,
+            )
+
+        deleted_targets = {
+            (c.args[0], c.args[1]) for c in mock_slack.remove_message.call_args_list
+        }
+        self.assertEqual(deleted_targets, {('C1', '1.0'), ('C2', '2.0')})
+        mock_slack.send_dm_blocks.assert_called_once()
+        self.assertEqual(mock_slack.send_dm_blocks.call_args.args[0], 'U01AXE0P5M3')
+        id_dms = [
+            c for c in mock_slack.send_dm.call_args_list
+            if c.args == ('U01AXE0P5M3', 'U_SPAMMER')
+        ]
+        self.assertEqual(len(id_dms), 1)
+        self.assertEqual(store['deleted'], ('U_SPAMMER', 'abc'))
+        self.assertEqual(mock_audit.call_args.args[1], 'CROSS_CHANNEL_SPAM')
+
+    @patch('automator_lambda_function.slack')
+    def test_scan_skips_aggregates_that_are_still_posting(self, mock_slack):
+        session = self._session(last_seen=1000 + 170)
+        store = {
+            'list_ready_sessions': lambda cutoff: [session],
+            'load_session': lambda user_id, fp: session,
+            'delete_session': lambda *args: None,
+        }
+        lambda_function.flush_quiet_spam_sessions(now=1000 + 180, store=store)
+        mock_slack.remove_message.assert_not_called()
+        mock_slack.send_dm.assert_not_called()
 
 
 class TestFaqAssistant(unittest.TestCase):
