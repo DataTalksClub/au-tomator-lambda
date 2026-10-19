@@ -1060,6 +1060,106 @@ class TestFaqAssistant(unittest.TestCase):
             'See <https://datatalks.club/faq/|FAQ>.',
         )
 
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.call_faq_assistant')
+    def test_handle_app_mention_in_thread_uses_thread_ts(self, mock_call, mock_slack):
+        mock_call.return_value = {
+            'answer': 'Yes, you can still join.'
+        }
+        mock_slack.github_to_slack_markdown.return_value = (
+            'Yes, you can still join.'
+        )
+        event = {
+            'type': 'app_mention',
+            'channel': 'C06TEGTGM3J',
+            'user': 'U12345',
+            'text': '<@UFAQBOT> Can I still join?',
+            'ts': '1790000000.000200',
+            'thread_ts': '1790000000.000100',
+        }
+
+        lambda_function.handle_app_mention(event)
+
+        mock_call.assert_called_once_with({
+            'question': 'Can I still join?',
+            'scope': 'course',
+            'course': 'llm-zoomcamp',
+            'channel': 'C06TEGTGM3J',
+            'user': 'U12345',
+        })
+        mock_slack.post_message_to_thread.assert_called_once_with(
+            'C06TEGTGM3J',
+            '1790000000.000100',
+            'Yes, you can still join.',
+        )
+
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.call_faq_assistant')
+    def test_handle_app_mention_screenshot_case_jude_ezeh(self, mock_call, mock_slack):
+        """Reference case: Jude Ezeh pinging @Au-Tomator 🚀 in a thread in #course-ml-zoomcamp."""
+        mock_call.return_value = {
+            'answer': 'Machine Learning Zoomcamp is a free, hands-on course.'
+        }
+        mock_slack.github_to_slack_markdown.return_value = (
+            'Machine Learning Zoomcamp is a free, hands-on course.'
+        )
+        event = {
+            'type': 'app_mention',
+            'channel': 'C0288NJ5XSA',  # course-ml-zoomcamp
+            'user': 'U_JUDE_EZEH',
+            'text': '<@UFAQBOT> 🚀',
+            'ts': '1726000000.000200',
+            'thread_ts': '1726000000.000100',
+        }
+
+        lambda_function.handle_app_mention(event)
+
+        mock_call.assert_called_once_with({
+            'question': '🚀',
+            'scope': 'course',
+            'course': 'machine-learning-zoomcamp',
+            'channel': 'C0288NJ5XSA',
+            'user': 'U_JUDE_EZEH',
+        })
+        mock_slack.post_message_to_thread.assert_called_once_with(
+            'C0288NJ5XSA',
+            '1726000000.000100',
+            'Machine Learning Zoomcamp is a free, hands-on course.',
+        )
+
+    def test_clean_app_mention_text_supports_pipe_display_name(self):
+        cleaned = lambda_function.clean_app_mention_text(
+            '<@U012345|au-tomator> Can I still join after the course started?'
+        )
+        self.assertEqual(cleaned, 'Can I still join after the course started?')
+
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.call_faq_assistant')
+    def test_handle_app_mention_dict_channel(self, mock_call, mock_slack):
+        mock_call.return_value = {'answer': 'Answer.'}
+        mock_slack.github_to_slack_markdown.return_value = 'Answer.'
+        event = {
+            'type': 'app_mention',
+            'channel': {'id': 'C0288NJ5XSA'},
+            'text': '<@UFAQBOT> Question',
+            'ts': '1700000000.000200',
+            'thread_ts': '1700000000.000100',
+        }
+
+        lambda_function.handle_app_mention(event)
+
+        mock_call.assert_called_once_with({
+            'question': 'Question',
+            'scope': 'course',
+            'course': 'machine-learning-zoomcamp',
+            'channel': 'C0288NJ5XSA',
+        })
+        mock_slack.post_message_to_thread.assert_called_once_with(
+            'C0288NJ5XSA',
+            '1700000000.000100',
+            'Answer.',
+        )
+
     def test_format_faq_sources_renders_slack_links(self):
         out = lambda_function.format_faq_sources([
             {'source': 'faq', 'title': 'Joining late',

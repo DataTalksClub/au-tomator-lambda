@@ -292,6 +292,33 @@ class TestAppMentionRouting(unittest.TestCase):
         self.assertEqual(payload['course'], 'machine-learning-zoomcamp')
         mock_slack.post_message_to_thread.assert_called_once()
 
+    @patch('automator_lambda_function.call_faq_assistant')
+    @patch('automator_lambda_function.slack')
+    def test_app_mention_in_thread_answers_in_same_thread(self, mock_slack, mock_call):
+        mock_slack.github_to_slack_markdown.side_effect = lambda text: text
+        mock_call.return_value = {'answer': 'Yes, you can still join.'}
+        event = {
+            'type': 'app_mention',
+            'channel': CH_ML,
+            'text': '<@UFAQBOT> 🚀',
+            'user': 'U_JUDE_EZEH',
+            'ts': '1700000000.000200',
+            'thread_ts': '1700000000.000100',
+        }
+
+        deliver(event)
+
+        payload = mock_call.call_args[0][0]
+        self.assertEqual(payload['scope'], 'course')
+        self.assertEqual(payload['course'], 'machine-learning-zoomcamp')
+        self.assertEqual(payload['question'], '🚀')
+        self.assertEqual(payload['user'], 'U_JUDE_EZEH')
+        mock_slack.post_message_to_thread.assert_called_once_with(
+            CH_ML,
+            '1700000000.000100',
+            'Yes, you can still join.',
+        )
+
 
 class TestUnknownReaction(unittest.TestCase):
     """A reaction with no config does nothing."""

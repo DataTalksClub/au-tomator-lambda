@@ -45,7 +45,7 @@ def get_channel_name(channel_id):
 
 
 def clean_app_mention_text(text):
-    text = re.sub(r'<@[A-Z0-9]+>', ' ', text or '')
+    text = re.sub(r'<@[A-Z0-9]+(?:\|[^>]+)?>', ' ', text or '')
     text = re.sub(r'\s+', ' ', text)
     return text.strip()
 
@@ -65,8 +65,11 @@ def course_for_channel(channel_id):
 
 
 def build_faq_assistant_payload(event):
+    channel = event.get('channel')
+    if isinstance(channel, dict):
+        channel = channel.get('id')
     return build_faq_assistant_payload_for_question(
-        event.get('channel'),
+        channel,
         event.get('text', ''),
         user=event.get('user'),
     )
@@ -206,6 +209,8 @@ def handle_app_mention(event):
         return
 
     channel = event.get('channel')
+    if isinstance(channel, dict):
+        channel = channel.get('id')
     thread_ts = event.get('thread_ts') or event.get('ts')
     payload = build_faq_assistant_payload(event)
 
