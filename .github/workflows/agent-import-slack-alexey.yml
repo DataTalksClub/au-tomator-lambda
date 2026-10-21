@@ -1,0 +1,92 @@
+name: Agent import slack-alexey
+on:
+  workflow_dispatch:
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::387546586013:role/automator-lambda-deploy
+          aws-region: eu-west-1
+      - name: Import USER_SLACK_TOKEN into dapier as slack-alexey
+        env:
+          DAPIER_TOKEN: ${{ secrets.DAPIER_OPERATOR_TOKEN }}
+          DAPIER_API_URL: https://dapier.dtcdev.click
+        run: |
+          set -euo pipefail
+          umask 077
+          if [ -z "${DAPIER_TOKEN:-}" ]; then
+            echo "DAPIER_OPERATOR_TOKEN secret missing" >&2
+            exit 1
+          fi
+          aws lambda get-function \
+            --function-name automator-process-reaction \
+            --query 'Configuration.Environment.Variables.USER_SLACK_TOKEN' \
+            --output text > /tmp/slack-token
+          # Sanity without printing token
+          python3 - <<'PY'
+          t=open("/tmp/slack-token").read().strip()
+          assert t and t != "None", "USER_SLACK_TOKEN missing from Lambda env"
+          assert t.startswith("xoxp-"), f"expected xoxp- prefix, got {t[:5]!r}..."
+          print("token_ok prefix=xoxp len=%d" % len(t))
+          PY
+          python3 - <<'PY'
+          import json, urllib.request, os
+          token = open("/tmp/slack-token").read().strip()
+          body = json.dumps({
+            "connection_id": "slack-alexey",
+            "provider": "slack",
+            "token": token,
+          }).encode()
+          req = urllib.request.Request(
+            os.environ["DAPIER_API_URL"].rstrip("/") + "/api/agent/connections/import",
+            data=body,
+            method="POST",
+            headers={
+              "authorization": "Bearer " + os.environ["DAPIER_TOKEN"],
+              "content-type": "application/json",
+            },
+          )
+          try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+              data = json.load(resp)
+          except urllib.error.HTTPError as e:
+            err = e.read().decode("utf-8", "replace")
+            # redact any token-like substrings
+            import re
+            err = re.sub(r"xox[pba]-[A-Za-z0-9-]+", "xox*-REDACTED", err)
+            raise SystemExit(f"import HTTP {e.code}: {err}")
+          print("imported", data.get("connection_id"), data.get("account_title") or data.get("verified_account_id"))
+          PY
+          # Grant Orin use
+          python3 - <<'PY'
+          import json, urllib.request, os, re
+          body = json.dumps({
+            "connection_id": "slack-alexey",
+            "subject": "a4d85458-b0a1-7059-d110-2b9209c48d9d",
+            "agent": "orin",
+            "operations": ["use"],
+          }).encode()
+          req = urllib.request.Request(
+            os.environ["DAPIER_API_URL"].rstrip("/") + "/api/agent/grants",
+            data=body,
+            method="PUT",
+            headers={
+              "authorization": "Bearer " + os.environ["DAPIER_TOKEN"],
+              "content-type": "application/json",
+            },
+          )
+          try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+              data = json.load(resp)
+          except urllib.error.HTTPError as e:
+            err = re.sub(r"xox[pba]-[A-Za-z0-9-]+", "xox*-REDACTED", e.read().decode("utf-8", "replace"))
+            raise SystemExit(f"grant HTTP {e.code}: {err}")
+          print("granted", data.get("subject"), data.get("agent"), data.get("connection_id"), data.get("operations"))
+          PY
+          shred -u /tmp/slack-token 2>/dev/null || rm -f /tmp/slack-token
