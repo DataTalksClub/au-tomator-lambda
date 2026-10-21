@@ -1,11 +1,6 @@
 name: Agent import slack-alexey
 on:
   workflow_dispatch:
-    inputs:
-      mode:
-        description: "import or find-user"
-        default: "find-user"
-        required: true
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -17,10 +12,7 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::387546586013:role/automator-lambda-deploy
           aws-region: eu-west-1
-      - name: Find Mikhail via bot token scopes
-        env:
-          DAPIER_TOKEN: ${{ secrets.DAPIER_OPERATOR_TOKEN }}
-          DAPIER_API_URL: https://dapier.dtcdev.click
+      - name: auth.test scopes + try DM export APIs
         run: |
           set -euo pipefail
           umask 077
@@ -29,50 +21,38 @@ jobs:
             --query 'Configuration.Environment.Variables' \
             --output json > /tmp/env.json
           python3 - <<'PY'
-          import json,urllib.request,urllib.parse,os,re
+          import json,urllib.request,urllib.parse
           env=json.load(open("/tmp/env.json"))
-          print("env_keys", sorted(env.keys()))
-          bot=env.get("SLACK_BOT_TOKEN") or env.get("BOT_SLACK_TOKEN") or env.get("SLACK_TOKEN")
-          user=env.get("USER_SLACK_TOKEN")
-          print("has_bot", bool(bot), "has_user", bool(user))
-          if bot:
-            print("bot_prefix", bot[:5])
-          # Prefer bot for users.list; fall back to user
-          token = bot or user
-          assert token, "no slack token"
-          cursor=None
-          found=[]
-          pages=0
-          while pages < 50:
-            pages += 1
-            qs={"limit":200}
-            if cursor: qs["cursor"]=cursor
-            req=urllib.request.Request(
-              "https://slack.com/api/users.list?"+urllib.parse.urlencode(qs),
-              headers={"Authorization":"Bearer "+token})
-            data=json.load(urllib.request.urlopen(req, timeout=60))
-            if not data.get("ok"):
-              print("users.list_error", data.get("error"))
-              break
-            for m in data.get("members") or []:
-              prof=m.get("profile") or {}
-              blob=" ".join([
-                str(m.get("id") or ""),
-                str(m.get("name") or ""),
-                str(prof.get("real_name") or ""),
-                str(prof.get("display_name") or ""),
-                str(prof.get("email") or ""),
-              ]).lower()
-              if "rozhkov" in blob or ("mikhail" in blob and "rozh" in blob):
-                found.append({
-                  "id": m.get("id"),
-                  "name": prof.get("real_name") or m.get("name"),
-                  "handle": m.get("name"),
-                  "email": prof.get("email"),
-                })
-            cursor=(data.get("response_metadata") or {}).get("next_cursor") or None
-            if not cursor:
-              break
-          print("pages", pages, "matches", json.dumps(found, ensure_ascii=False))
+          user=env["USER_SLACK_TOKEN"]
+          bot=env["SLACK_TOKEN"]
+          def call(token, method, payload=None, http="GET"):
+            if http=="GET":
+              url="https://slack.com/api/"+method
+              if payload:
+                url+="?"+urllib.parse.urlencode(payload)
+              req=urllib.request.Request(url, headers={"Authorization":"Bearer "+token})
+            else:
+              data=urllib.parse.urlencode(payload or {}).encode()
+              req=urllib.request.Request("https://slack.com/api/"+method, data=data,
+                headers={"Authorization":"Bearer "+token, "Content-Type":"application/x-www-form-urlencoded"})
+            return json.load(urllib.request.urlopen(req, timeout=60))
+          for label,tok in [("user",user),("bot",bot)]:
+            info=call(tok,"auth.test")
+            print(label, "ok", info.get("ok"), "user", info.get("user"), "user_id", info.get("user_id"), "team", info.get("team"))
+            # scopes header isn't in JSON; use apps.permissions.info if available
+          # Try conversations.list im for user
+          for method,payload in [
+            ("conversations.list", {"types":"im","limit":"5"}),
+            ("conversations.open", {"users":"U01PAASPXHU"}),
+            ("users.info", {"user":"U01PAASPXHU"}),
+            ("search.messages", {"query":"from:<@U01PAASPXHU>","count":"1"}),
+          ]:
+            data=call(user, method, payload, http="POST" if method in ("conversations.open",) else "GET")
+            # conversations.open needs POST
+            print("user", method, "ok", data.get("ok"), "error", data.get("error"),
+                  "channel" , (data.get("channel") or {}).get("id") if isinstance(data.get("channel"),dict) else data.get("channel"))
+          # Also try bot conversations.open (won't work for private DM usually)
+          data=call(bot,"conversations.open",{"users":"U01PAASPXHU"}, http="POST")
+          print("bot conversations.open", data.get("ok"), data.get("error"))
           PY
           shred -u /tmp/env.json 2>/dev/null || rm -f /tmp/env.json
