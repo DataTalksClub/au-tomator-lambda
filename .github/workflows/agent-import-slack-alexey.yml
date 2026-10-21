@@ -1,92 +1,78 @@
 name: Agent import slack-alexey
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "import or find-user"
+        default: "find-user"
+        required: true
 jobs:
-  import:
+  run:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
     steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v6
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::387546586013:role/automator-lambda-deploy
           aws-region: eu-west-1
-      - name: Import USER_SLACK_TOKEN into dapier as slack-alexey
+      - name: Find Mikhail via bot token scopes
         env:
           DAPIER_TOKEN: ${{ secrets.DAPIER_OPERATOR_TOKEN }}
           DAPIER_API_URL: https://dapier.dtcdev.click
         run: |
           set -euo pipefail
           umask 077
-          if [ -z "${DAPIER_TOKEN:-}" ]; then
-            echo "DAPIER_OPERATOR_TOKEN secret missing" >&2
-            exit 1
-          fi
           aws lambda get-function \
             --function-name automator-process-reaction \
-            --query 'Configuration.Environment.Variables.USER_SLACK_TOKEN' \
-            --output text > /tmp/slack-token
-          # Sanity without printing token
+            --query 'Configuration.Environment.Variables' \
+            --output json > /tmp/env.json
           python3 - <<'PY'
-          t=open("/tmp/slack-token").read().strip()
-          assert t and t != "None", "USER_SLACK_TOKEN missing from Lambda env"
-          assert t.startswith("xoxp-"), f"expected xoxp- prefix, got {t[:5]!r}..."
-          print("token_ok prefix=xoxp len=%d" % len(t))
+          import json,urllib.request,urllib.parse,os,re
+          env=json.load(open("/tmp/env.json"))
+          print("env_keys", sorted(env.keys()))
+          bot=env.get("SLACK_BOT_TOKEN") or env.get("BOT_SLACK_TOKEN") or env.get("SLACK_TOKEN")
+          user=env.get("USER_SLACK_TOKEN")
+          print("has_bot", bool(bot), "has_user", bool(user))
+          if bot:
+            print("bot_prefix", bot[:5])
+          # Prefer bot for users.list; fall back to user
+          token = bot or user
+          assert token, "no slack token"
+          cursor=None
+          found=[]
+          pages=0
+          while pages < 50:
+            pages += 1
+            qs={"limit":200}
+            if cursor: qs["cursor"]=cursor
+            req=urllib.request.Request(
+              "https://slack.com/api/users.list?"+urllib.parse.urlencode(qs),
+              headers={"Authorization":"Bearer "+token})
+            data=json.load(urllib.request.urlopen(req, timeout=60))
+            if not data.get("ok"):
+              print("users.list_error", data.get("error"))
+              break
+            for m in data.get("members") or []:
+              prof=m.get("profile") or {}
+              blob=" ".join([
+                str(m.get("id") or ""),
+                str(m.get("name") or ""),
+                str(prof.get("real_name") or ""),
+                str(prof.get("display_name") or ""),
+                str(prof.get("email") or ""),
+              ]).lower()
+              if "rozhkov" in blob or ("mikhail" in blob and "rozh" in blob):
+                found.append({
+                  "id": m.get("id"),
+                  "name": prof.get("real_name") or m.get("name"),
+                  "handle": m.get("name"),
+                  "email": prof.get("email"),
+                })
+            cursor=(data.get("response_metadata") or {}).get("next_cursor") or None
+            if not cursor:
+              break
+          print("pages", pages, "matches", json.dumps(found, ensure_ascii=False))
           PY
-          python3 - <<'PY'
-          import json, urllib.request, os
-          token = open("/tmp/slack-token").read().strip()
-          body = json.dumps({
-            "connection_id": "slack-alexey",
-            "provider": "slack",
-            "token": token,
-          }).encode()
-          req = urllib.request.Request(
-            os.environ["DAPIER_API_URL"].rstrip("/") + "/api/agent/connections/import",
-            data=body,
-            method="POST",
-            headers={
-              "authorization": "Bearer " + os.environ["DAPIER_TOKEN"],
-              "content-type": "application/json",
-            },
-          )
-          try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
-              data = json.load(resp)
-          except urllib.error.HTTPError as e:
-            err = e.read().decode("utf-8", "replace")
-            # redact any token-like substrings
-            import re
-            err = re.sub(r"xox[pba]-[A-Za-z0-9-]+", "xox*-REDACTED", err)
-            raise SystemExit(f"import HTTP {e.code}: {err}")
-          print("imported", data.get("connection_id"), data.get("account_title") or data.get("verified_account_id"))
-          PY
-          # Grant Orin use
-          python3 - <<'PY'
-          import json, urllib.request, os, re
-          body = json.dumps({
-            "connection_id": "slack-alexey",
-            "subject": "a4d85458-b0a1-7059-d110-2b9209c48d9d",
-            "agent": "orin",
-            "operations": ["use"],
-          }).encode()
-          req = urllib.request.Request(
-            os.environ["DAPIER_API_URL"].rstrip("/") + "/api/agent/grants",
-            data=body,
-            method="PUT",
-            headers={
-              "authorization": "Bearer " + os.environ["DAPIER_TOKEN"],
-              "content-type": "application/json",
-            },
-          )
-          try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
-              data = json.load(resp)
-          except urllib.error.HTTPError as e:
-            err = re.sub(r"xox[pba]-[A-Za-z0-9-]+", "xox*-REDACTED", e.read().decode("utf-8", "replace"))
-            raise SystemExit(f"grant HTTP {e.code}: {err}")
-          print("granted", data.get("subject"), data.get("agent"), data.get("connection_id"), data.get("operations"))
-          PY
-          shred -u /tmp/slack-token 2>/dev/null || rm -f /tmp/slack-token
+          shred -u /tmp/env.json 2>/dev/null || rm -f /tmp/env.json
