@@ -1298,6 +1298,232 @@ class TestFaqAssistant(unittest.TestCase):
             'Yes, you can still join.',
         )
 
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.call_faq_assistant')
+    def test_handle_bare_app_mention_in_thread_builds_question_from_parent_and_replies(
+        self, mock_call, mock_slack
+    ):
+        mock_call.return_value = {
+            'answer': 'You can watch either the playlist or individual module videos.'
+        }
+        mock_slack.github_to_slack_markdown.return_value = (
+            'You can watch either the playlist or individual module videos.'
+        )
+        mock_slack.get_thread_replies.return_value = [
+            {
+                'ts': '1790000000.000100',
+                'user': 'U_STUDENT',
+                'text': 'Should I watch last year playlist or individual module videos?',
+            },
+            {
+                'ts': '1790000000.000150',
+                'user': 'U_STUDENT2',
+                'text': '<@U_STUDENT> Also wondering about homework 1.',
+            },
+            {
+                'ts': '1790000000.000180',
+                'bot_id': 'B_BOT_NOTIF',
+                'text': 'Automated notification',
+            },
+            {
+                'ts': '1790000000.000200',
+                'user': 'U_ALEXEY',
+                'text': '<@UFAQBOT>',
+            },
+        ]
+        event = {
+            'type': 'app_mention',
+            'channel': 'C06TEGTGM3J',
+            'user': 'U_ALEXEY',
+            'text': '<@UFAQBOT>',
+            'ts': '1790000000.000200',
+            'thread_ts': '1790000000.000100',
+        }
+
+        lambda_function.handle_app_mention(event)
+
+        mock_slack.get_thread_replies.assert_called_once_with(
+            'C06TEGTGM3J',
+            '1790000000.000100',
+            include_parent=True,
+        )
+        mock_call.assert_called_once_with({
+            'question': (
+                'Should I watch last year playlist or individual module videos?\n\n'
+                'Also wondering about homework 1.'
+            ),
+            'scope': 'course',
+            'course': 'llm-zoomcamp',
+            'channel': 'C06TEGTGM3J',
+            'user': 'U_ALEXEY',
+        })
+        mock_slack.post_message_to_thread.assert_called_once_with(
+            'C06TEGTGM3J',
+            '1790000000.000100',
+            'You can watch either the playlist or individual module videos.',
+        )
+
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.call_faq_assistant')
+    def test_handle_bare_app_mention_in_thread_alexey_case(self, mock_call, mock_slack):
+        """Course AI Dev Tools Zoomcamp scenario: student question is parent, Alexey replies @Au-Tomator."""
+        mock_call.return_value = {'answer': 'Answer to student.'}
+        mock_slack.github_to_slack_markdown.return_value = 'Answer to student.'
+        mock_slack.get_thread_replies.return_value = [
+            {
+                'ts': '1730000000.000100',
+                'user': 'U_STUDENT',
+                'text': 'Is there a late submission form for module 1?',
+            },
+            {
+                'ts': '1730000000.000200',
+                'user': 'U01AXE0P5M3',
+                'text': '<@U098BOT|Au-Tomator>',
+            },
+        ]
+        event = {
+            'type': 'app_mention',
+            'channel': 'C09HWT76L95',  # course-ai-dev-tools-zoomcamp
+            'user': 'U01AXE0P5M3',
+            'text': '<@U098BOT|Au-Tomator>',
+            'ts': '1730000000.000200',
+            'thread_ts': '1730000000.000100',
+        }
+
+        lambda_function.handle_app_mention(event)
+
+        mock_call.assert_called_once_with({
+            'question': 'Is there a late submission form for module 1?',
+            'scope': 'course',
+            'course': 'ai-dev-tools-zoomcamp',
+            'channel': 'C09HWT76L95',
+            'user': 'U01AXE0P5M3',
+        })
+        mock_slack.post_message_to_thread.assert_called_once_with(
+            'C09HWT76L95',
+            '1730000000.000100',
+            'Answer to student.',
+        )
+
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.call_faq_assistant')
+    def test_handle_bare_app_mention_in_thread_empty_thread_fallback(self, mock_call, mock_slack):
+        mock_slack.get_thread_replies.return_value = []
+        event = {
+            'type': 'app_mention',
+            'channel': 'C06TEGTGM3J',
+            'user': 'U12345',
+            'text': '<@UFAQBOT>',
+            'ts': '1790000000.000200',
+            'thread_ts': '1790000000.000100',
+        }
+
+        lambda_function.handle_app_mention(event)
+
+        mock_call.assert_not_called()
+        mock_slack.post_message_to_thread.assert_called_once_with(
+            'C06TEGTGM3J',
+            '1790000000.000100',
+            'Please include a question.',
+        )
+
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.call_faq_assistant')
+    def test_handle_bare_app_mention_in_thread_fetch_failure_fallback(self, mock_call, mock_slack):
+        mock_slack.get_thread_replies.side_effect = Exception('Slack API rate limited')
+        event = {
+            'type': 'app_mention',
+            'channel': 'C06TEGTGM3J',
+            'user': 'U12345',
+            'text': '<@UFAQBOT>',
+            'ts': '1790000000.000200',
+            'thread_ts': '1790000000.000100',
+        }
+
+        lambda_function.handle_app_mention(event)
+
+        mock_call.assert_not_called()
+        mock_slack.post_message_to_thread.assert_called_once_with(
+            'C06TEGTGM3J',
+            '1790000000.000100',
+            'Please include a question.',
+        )
+
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.call_faq_assistant')
+    def test_handle_bare_app_mention_in_thread_only_bots_and_mention_fallback(
+        self, mock_call, mock_slack
+    ):
+        mock_slack.get_thread_replies.return_value = [
+            {'ts': '1790000000.000100', 'bot_id': 'B123', 'text': 'Bot parent'},
+            {'ts': '1790000000.000200', 'user': 'U123', 'text': '<@UFAQBOT>'},
+        ]
+        event = {
+            'type': 'app_mention',
+            'channel': 'C06TEGTGM3J',
+            'user': 'U123',
+            'text': '<@UFAQBOT>',
+            'ts': '1790000000.000200',
+            'thread_ts': '1790000000.000100',
+        }
+
+        lambda_function.handle_app_mention(event)
+
+        mock_call.assert_not_called()
+        mock_slack.post_message_to_thread.assert_called_once_with(
+            'C06TEGTGM3J',
+            '1790000000.000100',
+            'Please include a question.',
+        )
+
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.call_faq_assistant')
+    def test_handle_bare_app_mention_top_level_still_replies_please_include_question(
+        self, mock_call, mock_slack
+    ):
+        event = {
+            'type': 'app_mention',
+            'channel': 'C06TEGTGM3J',
+            'user': 'U12345',
+            'text': '<@UFAQBOT>',
+            'ts': '1790000000.000100',
+        }
+
+        lambda_function.handle_app_mention(event)
+
+        mock_slack.get_thread_replies.assert_not_called()
+        mock_call.assert_not_called()
+        mock_slack.post_message_to_thread.assert_called_once_with(
+            'C06TEGTGM3J',
+            '1790000000.000100',
+            'Please include a question.',
+        )
+
+    @patch('automator_lambda_function.slack')
+    @patch('automator_lambda_function.call_faq_assistant')
+    def test_handle_bare_app_mention_in_thread_truncation(self, mock_call, mock_slack):
+        long_text = 'A ' * 3000
+        mock_call.return_value = {'answer': 'Long question answer.'}
+        mock_slack.github_to_slack_markdown.return_value = 'Long question answer.'
+        mock_slack.get_thread_replies.return_value = [
+            {'ts': '1790000000.000100', 'user': 'U_STUDENT', 'text': long_text},
+            {'ts': '1790000000.000200', 'user': 'U_ALEXEY', 'text': '<@UFAQBOT>'},
+        ]
+        event = {
+            'type': 'app_mention',
+            'channel': 'C06TEGTGM3J',
+            'user': 'U_ALEXEY',
+            'text': '<@UFAQBOT>',
+            'ts': '1790000000.000200',
+            'thread_ts': '1790000000.000100',
+        }
+
+        lambda_function.handle_app_mention(event)
+
+        question = mock_call.call_args[0][0]['question']
+        self.assertTrue(question.endswith('...'))
+        self.assertLessEqual(len(question), lambda_function.MAX_THREAD_QUESTION_LENGTH + 3)
+
 
 class TestFormatFaqSources(unittest.TestCase):
     """format_faq_sources prefixes each line with the source type."""
@@ -1336,6 +1562,80 @@ class TestFormatFaqSources(unittest.TestCase):
     def test_empty_sources(self):
         self.assertEqual(lambda_function.format_faq_sources(None), '')
         self.assertEqual(lambda_function.format_faq_sources([]), '')
+
+
+class TestSlackThreadReplies(unittest.TestCase):
+    @patch('slack.requests.get')
+    def test_get_thread_replies_excludes_parent_by_default(self, mock_get):
+        from slack import get_thread_replies
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            'ok': True,
+            'messages': [
+                {'ts': '100.0', 'text': 'Parent'},
+                {'ts': '101.0', 'text': 'Reply 1'},
+            ],
+        }
+        mock_get.return_value = mock_resp
+
+        replies = get_thread_replies('C123', '100.0')
+        self.assertEqual(len(replies), 1)
+        self.assertEqual(replies[0]['ts'], '101.0')
+        mock_get.assert_called_once_with(
+            'https://slack.com/api/conversations.replies',
+            params={'channel': 'C123', 'ts': '100.0'},
+            headers={'Authorization': f'Bearer {os.getenv("SLACK_TOKEN")}'},
+        )
+
+    @patch('slack.requests.get')
+    def test_get_thread_replies_include_parent_returns_all(self, mock_get):
+        from slack import get_thread_replies
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            'ok': True,
+            'messages': [
+                {'ts': '100.0', 'text': 'Parent'},
+                {'ts': '101.0', 'text': 'Reply 1'},
+            ],
+        }
+        mock_get.return_value = mock_resp
+
+        all_msgs = get_thread_replies('C123', '100.0', include_parent=True)
+        self.assertEqual(len(all_msgs), 2)
+        self.assertEqual(all_msgs[0]['ts'], '100.0')
+
+    @patch('slack.requests.get')
+    def test_get_thread_messages_returns_all(self, mock_get):
+        from slack import get_thread_messages
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            'ok': True,
+            'messages': [
+                {'ts': '100.0', 'text': 'Parent'},
+                {'ts': '101.0', 'text': 'Reply 1'},
+            ],
+        }
+        mock_get.return_value = mock_resp
+
+        all_msgs = get_thread_messages('C123', '100.0')
+        self.assertEqual(len(all_msgs), 2)
+
+    @patch('slack.requests.get')
+    def test_get_thread_replies_error_response_returns_empty_list(self, mock_get):
+        from slack import get_thread_replies
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            'ok': False,
+            'error': 'channel_not_found',
+        }
+        mock_get.return_value = mock_resp
+
+        res = get_thread_replies('C_BAD', '100.0', include_parent=True)
+        self.assertEqual(res, [])
 
 
 if __name__ == '__main__':

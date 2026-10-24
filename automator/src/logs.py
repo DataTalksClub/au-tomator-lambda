@@ -7,6 +7,9 @@ class Logger():
     def info(self, message):
         self.print(message)
 
+    def warning(self, message):
+        self.print(message)
+
     def error(self, message):
         self.print(message)
 

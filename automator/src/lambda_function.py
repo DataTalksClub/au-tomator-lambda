@@ -18,6 +18,7 @@ CONFIG_FILE = os.getenv('CONFIG_FILE', 'config.yaml')
 FAQ_ASSISTANT_URL = os.getenv('FAQ_ASSISTANT_URL', '').strip()
 FAQ_ASSISTANT_SHARED_SECRET = os.getenv('FAQ_ASSISTANT_SHARED_SECRET', '')
 FAQ_ASSISTANT_TIMEOUT = int(os.getenv('FAQ_ASSISTANT_TIMEOUT', '55'))
+MAX_THREAD_QUESTION_LENGTH = 4000
 FAQ_ASSISTANT_ERROR_MESSAGE = (
     'The FAQ assistant is currently not available. '
     'In the meantime, you can try to find the answer here:'
@@ -45,8 +46,10 @@ def get_channel_name(channel_id):
 
 
 def clean_app_mention_text(text):
-    text = re.sub(r'<@[A-Z0-9]+(?:\|[^>]+)?>', ' ', text or '')
-    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'<@[A-Za-z0-9_]+(?:\|[^>]+)?>', ' ', text or '')
+    text = re.sub(r'[^\S\r\n]+', ' ', text)
+    text = re.sub(r' *(\n+) *', r'\1', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 
 
@@ -203,6 +206,87 @@ def format_faq_sources(sources, found_answer=True):
     return f'\n\n{heading}\n' + '\n'.join(lines)
 
 
+def is_bot_message(msg):
+    if not isinstance(msg, dict):
+        return False
+    if msg.get('bot_id'):
+        return True
+    if msg.get('subtype') == 'bot_message':
+        return True
+    if msg.get('user') == 'USLACKBOT':
+        return True
+    if msg.get('bot_profile'):
+        return True
+    if msg.get('app_id'):
+        return True
+    return False
+
+
+def build_question_from_thread_messages(messages, mention_ts=None, thread_ts=None):
+    if not messages:
+        return ''
+
+    parent = None
+    replies = []
+    for msg in messages:
+        if thread_ts and msg.get('ts') == thread_ts:
+            parent = msg
+        else:
+            replies.append(msg)
+
+    if parent is None and messages:
+        parent = messages[0]
+        replies = messages[1:]
+
+    ordered = [parent] if parent else []
+    ordered.extend(replies)
+
+    parts = []
+    for msg in ordered:
+        if not msg:
+            continue
+        ts = msg.get('ts')
+        if mention_ts and ts == mention_ts:
+            continue
+        if is_bot_message(msg):
+            continue
+        cleaned = clean_app_mention_text(msg.get('text', ''))
+        if cleaned:
+            parts.append(cleaned)
+
+    if not parts:
+        return ''
+
+    question = '\n\n'.join(parts)
+    if len(question) > MAX_THREAD_QUESTION_LENGTH:
+        truncated = question[:MAX_THREAD_QUESTION_LENGTH]
+        last_newline = truncated.rfind('\n')
+        last_space = truncated.rfind(' ')
+        cut = max(last_newline, last_space)
+        if cut > MAX_THREAD_QUESTION_LENGTH // 2:
+            question = truncated[:cut].rstrip() + '...'
+        else:
+            question = truncated.rstrip() + '...'
+
+    return question
+
+
+def build_question_from_thread(channel, thread_ts, mention_ts=None):
+    try:
+        messages = slack.get_thread_replies(channel, thread_ts, include_parent=True)
+    except Exception as exc:
+        logger.warning(
+            f"Failed to fetch thread replies for {channel} {thread_ts}: {exc}"
+        )
+        return ''
+
+    return build_question_from_thread_messages(
+        messages,
+        mention_ts=mention_ts,
+        thread_ts=thread_ts,
+    )
+
+
 def handle_app_mention(event):
     if event.get('bot_id'):
         logger.info('Ignoring bot app_mention')
@@ -211,8 +295,22 @@ def handle_app_mention(event):
     channel = event.get('channel')
     if isinstance(channel, dict):
         channel = channel.get('id')
-    thread_ts = event.get('thread_ts') or event.get('ts')
-    payload = build_faq_assistant_payload(event)
+
+    event_ts = event.get('ts')
+    thread_ts = event.get('thread_ts') or event_ts
+    is_in_thread = bool(event.get('thread_ts') and event.get('thread_ts') != event_ts)
+
+    cleaned_mention_text = clean_app_mention_text(event.get('text', ''))
+
+    if is_in_thread and not cleaned_mention_text:
+        question = build_question_from_thread(channel, thread_ts, mention_ts=event_ts)
+        payload = build_faq_assistant_payload_for_question(
+            channel,
+            question,
+            user=event.get('user'),
+        )
+    else:
+        payload = build_faq_assistant_payload(event)
 
     post_faq_assistant_answer(channel, thread_ts, payload)
 

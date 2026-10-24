@@ -319,6 +319,66 @@ class TestAppMentionRouting(unittest.TestCase):
             'Yes, you can still join.',
         )
 
+    @patch('automator_lambda_function.call_faq_assistant')
+    @patch('automator_lambda_function.slack')
+    def test_bare_app_mention_in_thread_answers_in_same_thread(self, mock_slack, mock_call):
+        mock_slack.github_to_slack_markdown.side_effect = lambda text: text
+        mock_call.return_value = {'answer': 'Answer to thread question.'}
+        mock_slack.get_thread_replies.return_value = [
+            {
+                'ts': '1700000000.000100',
+                'user': 'U_STUDENT',
+                'text': 'What is the homework deadline?',
+            },
+            {
+                'ts': '1700000000.000200',
+                'user': 'U_ALEXEY',
+                'text': '<@UFAQBOT>',
+            },
+        ]
+        event = {
+            'type': 'app_mention',
+            'channel': CH_ML,
+            'text': '<@UFAQBOT>',
+            'user': 'U_ALEXEY',
+            'ts': '1700000000.000200',
+            'thread_ts': '1700000000.000100',
+        }
+
+        deliver(event)
+
+        payload = mock_call.call_args[0][0]
+        self.assertEqual(payload['scope'], 'course')
+        self.assertEqual(payload['course'], 'machine-learning-zoomcamp')
+        self.assertEqual(payload['question'], 'What is the homework deadline?')
+        self.assertEqual(payload['user'], 'U_ALEXEY')
+        mock_slack.post_message_to_thread.assert_called_once_with(
+            CH_ML,
+            '1700000000.000100',
+            'Answer to thread question.',
+        )
+
+    @patch('automator_lambda_function.call_faq_assistant')
+    @patch('automator_lambda_function.slack')
+    def test_bare_app_mention_top_level_asks_for_question(self, mock_slack, mock_call):
+        mock_slack.github_to_slack_markdown.side_effect = lambda text: text
+        event = {
+            'type': 'app_mention',
+            'channel': CH_ML,
+            'text': '<@UFAQBOT>',
+            'user': 'U_ALEXEY',
+            'ts': '1700000000.000100',
+        }
+
+        deliver(event)
+
+        mock_call.assert_not_called()
+        mock_slack.post_message_to_thread.assert_called_once_with(
+            CH_ML,
+            '1700000000.000100',
+            'Please include a question.',
+        )
+
 
 class TestUnknownReaction(unittest.TestCase):
     """A reaction with no config does nothing."""

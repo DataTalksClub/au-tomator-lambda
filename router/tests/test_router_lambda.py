@@ -110,6 +110,30 @@ class TestRouterLambda(unittest.TestCase):
             body,
         )
 
+    def test_bare_app_mention_in_thread_routes_to_automator(self):
+        body = {
+            'event': {
+                'type': 'app_mention',
+                'user': 'U_NOT_ADMIN',
+                'channel': 'C0288NJ5XSA',
+                'text': '<@UFAQBOT>',
+                'ts': '1700000000.000200',
+                'thread_ts': '1700000000.000100',
+            }
+        }
+
+        lambda_function.run(body)
+
+        self.assertEqual(len(fake_lambda_client.invocations), 1)
+        self.assertEqual(
+            fake_lambda_client.invocations[0]['FunctionName'],
+            'automator-process-reaction',
+        )
+        self.assertEqual(
+            json.loads(fake_lambda_client.invocations[0]['Payload']),
+            body,
+        )
+
     def test_message_event_is_ignored(self):
         body = {
             'event': {
