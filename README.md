@@ -1,6 +1,6 @@
 # AuTomator
 
-A Slack moderation bot that runs on AWS Lambda. It lets you moderate from your phone—no laptop, no scanning every channel manually. I built it in June 2022 and have kept adding features as new needs came up.
+A Slack reaction and FAQ bot that runs on AWS Lambda. Admin emoji reactions trigger actions (delete, repost, ban cleanup, AI answers) and @mentions get FAQ answers, so you can run the community from your phone. Automatic message moderation lives in [DataTalksClub/slack-moderation](https://github.com/DataTalksClub/slack-moderation). I built it in June 2022 and have kept adding features as new needs came up.
 
 ## Repository layout
 
@@ -42,7 +42,7 @@ Its only job is to look at the incoming event and quickly decide where it should
 |-------|-----------|
 | **Reaction added by admin** | Automator |
 | **App mention** | Automator / FAQ Assistant |
-| **Message event** | Disabled for now |
+| **Message event** | Not handled (ignored; moderation lives in DataTalksClub/slack-moderation) |
 | **Button click** (e.g. from an alert) | Acknowledged only |
 
 The router and automator are separate on purpose: Slack expects a response within about 3 seconds. The router responds immediately and invokes the automator asynchronously, so longer work doesn’t time out.
@@ -218,7 +218,7 @@ Under **Subscribe to bot events**, add:
 
 Do not put these under **Subscribe to events on behalf of users**. The router expects events delivered to the bot integration, not user-authorized event streams.
 
-Plain `message` events are disabled for now and are ignored by the router.
+Plain `message` events are not handled and are ignored by the router; automatic moderation lives in DataTalksClub/slack-moderation.
 
 The bot also needs to post answers and read reacted messages, so make sure the app has:
 
