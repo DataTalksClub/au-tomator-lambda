@@ -1,12 +1,16 @@
 import os
 import re
 import requests
+import json
+from contextvars import ContextVar
+from datetime import datetime, timezone
 
 
 from logs import logger
 
 SLACK_TOKEN = os.getenv('SLACK_TOKEN')
 USER_SLACK_TOKEN = os.getenv('USER_SLACK_TOKEN')
+deletion_context = ContextVar('deletion_context', default=None)
 
 
 def post_message_thread(event, message):
@@ -146,6 +150,31 @@ def send_dm_blocks(user, message, blocks):
 
 
 def remove_message(channel, ts):
+    # Keep the guard at the sole chat.delete boundary so every deletion path,
+    # including ban sweeps and thread replies, must first preserve the message.
+    message = get_message_content(channel, ts)
+    if not isinstance(message, dict) or message.get('ts') != ts:
+        logger.error(json.dumps({
+            'tag': 'AUDIT_DELETED_MESSAGE_FAILED',
+            'channel': channel, 'ts': ts, 'reason': 'full message unavailable',
+        }))
+        raise RuntimeError('Deletion skipped: full message unavailable for audit')
+    context = deletion_context.get() or {}
+    record = {
+        'tag': 'AUDIT_DELETED_MESSAGE',
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        'channel': channel,
+        'ts': ts,
+        'thread_ts': message.get('thread_ts'),
+        'user': message.get('user'),
+        'text': message.get('text', ''),
+        'files': message.get('files', []),
+        'reacting_admin': context.get('user'),
+        'reaction': context.get('reaction'),
+        'message': message,
+    }
+    # Serialization/logging errors deliberately prevent chat.delete.
+    logger.info(json.dumps(record, ensure_ascii=True))
     url = 'https://slack.com/api/chat.delete'
 
     message_request = {

@@ -34,6 +34,15 @@ uv run python -m unittest discover tests -v
 
 ## Deploy
 
+Every real `chat.delete` first fetches the complete Slack message and emits a
+single JSON line tagged `AUDIT_DELETED_MESSAGE`, containing the message (including
+file metadata), channel, timestamps, author, reacting admin, and reaction. If the
+message cannot be fetched or the audit cannot be logged, deletion is stopped.
+This applies to template actions, `:delete:`, thread replies, and ban sweeps.
+The production log group `/aws/lambda/automator-process-reaction` has 3653-day
+retention (operationally configured). This is the immediate stopgap pending the
+mod.dtcdev.click persistence API; it does not yet write to the app database.
+
 ```bash
 cd automator
 bash scripts/package.sh

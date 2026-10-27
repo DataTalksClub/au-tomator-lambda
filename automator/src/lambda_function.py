@@ -775,7 +775,11 @@ def process_reaction(body, event):
         action_handler = action_handlers.get(action_type)
         
         if action_handler:
-            action_handler(event, reaction_config)
+            token = slack.deletion_context.set(event)
+            try:
+                action_handler(event, reaction_config)
+            finally:
+                slack.deletion_context.reset(token)
         else:
             logger.info(f"no handler for {action_type}")
 
