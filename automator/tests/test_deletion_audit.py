@@ -12,6 +12,12 @@ import slack
 
 class TestDeletionAudit(unittest.TestCase):
     def setUp(self):
+        persist = patch.object(slack.deletion_audit, 'persist', return_value={})
+        receipt = patch.object(slack.deletion_audit, 'receipt')
+        persist.start()
+        receipt.start()
+        self.addCleanup(persist.stop)
+        self.addCleanup(receipt.stop)
         self.message = {
             'ts': '123.456', 'thread_ts': '123.000', 'user': 'U_AUTHOR',
             'text': 'full text\nwith newline',
@@ -58,6 +64,6 @@ class TestDeletionAudit(unittest.TestCase):
     def test_log_failure_prevents_delete(self, get_message, post):
         get_message.return_value = self.message
         with patch.object(slack.logger, 'info', side_effect=OSError('log unavailable')):
-            with self.assertRaises(OSError):
+            with self.assertRaises(RuntimeError):
                 slack.remove_message('C_TEST', '123.456')
         post.assert_not_called()

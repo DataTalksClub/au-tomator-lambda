@@ -1,0 +1,45 @@
+name: Reconcile Automator deletion receipts
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      lookback_days:
+        description: 'Days of durable receipts to replay (1-3653)'
+        default: '7'
+        required: true
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: automator
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.12'
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::387546586013:role/automator-lambda-deploy
+          aws-region: eu-west-1
+      - name: Replay durable successful deletion receipts
+        env:
+          MOD_AUDIT_ENABLED: 'true'
+          MOD_API_URL: https://mod.dtcdev.click
+          MOD_API_TOKEN: ${{ secrets.MOD_API_TOKEN }}
+          LOOKBACK_DAYS: ${{ inputs.lookback_days || '7' }}
+        run: |
+          set -euo pipefail
+          [[ "$LOOKBACK_DAYS" =~ ^[0-9]+$ ]] && (( LOOKBACK_DAYS >= 1 && LOOKBACK_DAYS <= 3653 ))
+          start_ms=$(( ($(date +%s) - LOOKBACK_DAYS * 86400) * 1000 ))
+          aws logs filter-log-events \
+            --log-group-name /aws/lambda/automator-process-reaction \
+            --start-time "$start_ms" \
+            --filter-pattern '{ $.tag = "AUDIT_DELETE_RECEIPT" }' --output json | \
+            PYTHONPATH=src uv run python scripts/replay_audit_receipts.py

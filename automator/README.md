@@ -40,8 +40,24 @@ file metadata), channel, timestamps, author, reacting admin, and reaction. If th
 message cannot be fetched or the audit cannot be logged, deletion is stopped.
 This applies to template actions, `:delete:`, thread replies, and ban sweeps.
 The production log group `/aws/lambda/automator-process-reaction` has 3653-day
-retention (operationally configured). This is the immediate stopgap pending the
-mod.dtcdev.click persistence API; it does not yet write to the app database.
+retention (operationally configured). It also serves as a fallback journal.
+
+Before deleting, the client writes to `POST /api/v1/deleted-messages` on
+`https://mod.dtcdev.click` using the app's v1 contract. Two failed attempts stop
+deletion and alert the reacting moderator and configured admins through Slack.
+Only a matching `committed=true` response permits deletion. After successful
+deletion, `AUDIT_DELETE_RECEIPT` is logged before posting the receipt to the app.
+The reconciliation workflow replays the last seven days every 15 minutes;
+manual dispatch supports up to 3653 days after longer outages. It requires
+`logs:FilterLogEvents` on the production log group for the workflow's OIDC role.
+
+Provision the private per-client `MOD_API_TOKEN` as a GitHub repository secret.
+The normal deploy workflow preserves existing Lambda environment variables,
+sets `MOD_AUDIT_ENABLED=true`, `MOD_API_URL=https://mod.dtcdev.click`, and the
+token, and rejects missing/disabled configuration before updating code.
+Do not deploy this integration before the app API is ready. There is no
+runtime switch to bypass the app audit requirement. The app owns no-TTL
+retention, backups, training access and receipt reconciliation alerts.
 
 ```bash
 cd automator

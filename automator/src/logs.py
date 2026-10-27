@@ -2,7 +2,7 @@
 class Logger():
 
     def print(self, message):
-        print(message.replace('\n', ' ').replace('\r', ' '))
+        print(message.replace('\n', ' ').replace('\r', ' '), flush=True)
 
     def info(self, message):
         self.print(message)

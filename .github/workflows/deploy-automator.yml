@@ -41,6 +41,24 @@ jobs:
     - name: Package Lambda function
       run: bash scripts/package.sh
 
+    - name: Reject disabled or missing deletion audit configuration
+      env:
+        MOD_AUDIT_ENABLED: 'true'
+        MOD_API_URL: https://mod.dtcdev.click
+        MOD_API_TOKEN: ${{ secrets.MOD_API_TOKEN }}
+      run: |
+        umask 077
+        audit_env=$(mktemp)
+        trap 'rm -f "$audit_env"' EXIT
+        aws lambda get-function-configuration \
+          --function-name "$FUNCTION_NAME" --region "$AWS_REGION" \
+          --query 'Environment.Variables' --output json | \
+          PYTHONPATH=src uv run python scripts/check_audit_config.py --merge > "$audit_env"
+        aws lambda update-function-configuration \
+          --function-name "$FUNCTION_NAME" --region "$AWS_REGION" \
+          --environment "file://$audit_env" --query 'LastUpdateStatus' --output text
+        aws lambda wait function-updated --function-name "$FUNCTION_NAME" --region "$AWS_REGION"
+
     - name: Deploy to AWS Lambda
       run: bash scripts/deploy.sh
 
