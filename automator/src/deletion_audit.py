@@ -42,7 +42,7 @@ def persist(record, alert):
         'reacting_admin', 'reaction',
     )}
     payload.update({
-        'channel_name': None,
+        'channel_name': record.get('channel_name', ''),
         'source': 'au-tomator',
         'reason': 'moderator reaction',
         'deleted_at': record['timestamp'],

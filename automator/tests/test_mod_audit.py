@@ -41,6 +41,7 @@ class TestModAudit(unittest.TestCase):
         alert = Mock()
         payload = deletion_audit.persist(self.record, alert)
         self.assertEqual(payload['source'], 'au-tomator')
+        self.assertIsInstance(payload['channel_name'], str)
         self.assertEqual(post.call_args_list[0], post.call_args_list[1])
         self.assertFalse(post.call_args.kwargs['allow_redirects'])
         alert.assert_called_once_with('AUDIT_WRITE_FAILED', 'C1', '123.456', 1)

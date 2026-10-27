@@ -775,7 +775,10 @@ def process_reaction(body, event):
         action_handler = action_handlers.get(action_type)
         
         if action_handler:
-            token = slack.deletion_context.set({**event, 'audit_admins': config.get('admins', [])})
+            token = slack.deletion_context.set({
+                **event, 'audit_admins': config.get('admins', []),
+                'audit_channels': config.get('channels', {}),
+            })
             try:
                 action_handler(event, reaction_config)
             finally:
