@@ -11,8 +11,8 @@ dependencies = [
 # boto3 is supplied by the Lambda runtime, so it lives in dev only (for tests).
 [dependency-groups]
 dev = [
-    "pytest>=9.1.1",
-    "boto3>=1.43.34",
+    "pytest>=9.2.0",
+    "boto3>=1.43.123",
 ]
 
 [tool.uv]
