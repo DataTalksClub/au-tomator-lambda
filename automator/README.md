@@ -14,6 +14,43 @@ mentions. The router invokes it asynchronously:
 See the top-level [README](../README.md) for the configuration reference
 (`src/config.yaml`) and the FAQ assistant setup.
 
+## Live CMP context
+
+Before a course FAQ answer, the bot makes one bounded GET to CMP's dedicated
+`/api/bot/courses/<cohort>/state/` endpoint. Exact cohort mappings live under
+`cmp.courses` in `src/config.yaml`; update them when the community changes
+cohorts. No model selects tools and the bot never writes to CMP.
+
+The FAQ assistant receives a strict public `course_state` object with homework
+and project states, deadlines, peer-review availability, assignment existence,
+fetch time and CMP source links. CMP has no scheduled review-opening timestamp;
+the bot must not infer one from the submission deadline. The FAQ assistant must
+support authenticated `course_state` requests before enabling this integration.
+
+App mentions also request assignment counts using the configured Slack team and
+the event's user ID. CMP matches only its verified Slack account link, never a
+name or email. Counts are removed before calling the FAQ assistant and, for
+peer-review/assignment questions, sent through `chat.postEphemeral` only to the
+asker in the thread. Reaction requests fetch public state only. Unmapped users
+still receive the public answer and can follow its CMP link to sign in.
+
+Provision the dedicated `CMP_BOT_READ_TOKEN` GitHub secret and the
+`CMP_SLACK_TEAM_ID` repository variable. Normal deployment preserves other
+Lambda settings and installs these with `CMP_CONTEXT_ENABLED=1`; missing values
+block deployment. The token has no authority over CMP's administrative API.
+During local development the integration defaults off.
+
+Fetches have 2-second connect and 5-second read timeouts, reject redirects,
+cap the response at 64 KiB, and enforce a 7-second streaming deadline.
+Deployment sets the Lambda timeout to 120 seconds to leave room for the existing
+55-second FAQ request and the bounded CMP/alert calls.
+Missing mappings/configuration, HTTP/validation
+failures and private-delivery failures emit `CMP_CONTEXT_FAILED` and notify
+configured admins in Slack; failed alerts emit `CMP_ALERT_DELIVERY_FAILED`.
+CMP failures continue with the existing FAQ request. Alert and private-count
+delivery also use bounded timeouts. No credentials, response bodies or private
+counts are logged by this integration.
+
 ## Layout
 
 ```

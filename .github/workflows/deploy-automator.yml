@@ -6,6 +6,11 @@ on:
     types:
       - completed
   workflow_dispatch:
+    inputs:
+      live_proof:
+        description: 'Post a labelled CMP integration test thread in the ML course channel'
+        type: boolean
+        default: false
 
 env:
   AWS_REGION: eu-west-1
@@ -26,6 +31,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v7
+      with:
+        ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
     - name: Install uv
       uses: astral-sh/setup-uv@v7
@@ -41,11 +48,13 @@ jobs:
     - name: Package Lambda function
       run: bash scripts/package.sh
 
-    - name: Reject disabled or missing deletion audit configuration
+    - name: Validate audit and CMP configuration
       env:
         MOD_AUDIT_ENABLED: 'true'
         MOD_API_URL: https://mod.dtcdev.click
         MOD_API_TOKEN: ${{ secrets.MOD_API_TOKEN }}
+        CMP_BOT_READ_TOKEN: ${{ secrets.CMP_BOT_READ_TOKEN }}
+        CMP_SLACK_TEAM_ID: ${{ vars.CMP_SLACK_TEAM_ID }}
       run: |
         umask 077
         audit_env=$(mktemp)
@@ -53,9 +62,11 @@ jobs:
         aws lambda get-function-configuration \
           --function-name "$FUNCTION_NAME" --region "$AWS_REGION" \
           --query 'Environment.Variables' --output json | \
-          PYTHONPATH=src uv run python scripts/check_audit_config.py --merge > "$audit_env"
+          PYTHONPATH=src uv run python scripts/check_audit_config.py --merge | \
+          uv run python scripts/merge_cmp_config.py > "$audit_env"
         aws lambda update-function-configuration \
           --function-name "$FUNCTION_NAME" --region "$AWS_REGION" \
+          --timeout 120 \
           --environment "file://$audit_env" --query 'LastUpdateStatus' --output text
         aws lambda wait function-updated --function-name "$FUNCTION_NAME" --region "$AWS_REGION"
 
@@ -64,9 +75,18 @@ jobs:
 
     - name: Verify deployment
       run: |
+        aws lambda wait function-updated --function-name "$FUNCTION_NAME" --region "$AWS_REGION"
+        expected_sha=$(uv run python -c 'import base64,hashlib; print(base64.b64encode(hashlib.sha256(open("package.zip", "rb").read()).digest()).decode())')
+        actual_sha=$(aws lambda get-function --function-name "$FUNCTION_NAME" --region "$AWS_REGION" --query 'Configuration.CodeSha256' --output text)
+        test "$expected_sha" = "$actual_sha"
+        git rev-parse HEAD
         aws lambda get-function \
           --function-name "$FUNCTION_NAME" \
           --region "$AWS_REGION" \
           --query 'Configuration.LastModified' \
           --output text
         echo "Automator Lambda function updated successfully"
+
+    - name: Verify real Slack question and answer
+      if: github.event_name == 'workflow_dispatch' && inputs.live_proof
+      run: uv run python scripts/prove_cmp_slack.py
