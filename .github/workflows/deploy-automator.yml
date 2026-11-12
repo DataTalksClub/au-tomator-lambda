@@ -11,6 +11,10 @@ on:
         description: 'Post a labelled CMP integration test thread in the ML course channel'
         type: boolean
         default: false
+      proof_thread_ts:
+        description: 'Existing ML test thread to inspect instead of posting a new question'
+        type: string
+        default: ''
 
 env:
   AWS_REGION: eu-west-1
@@ -89,4 +93,6 @@ jobs:
 
     - name: Verify real Slack question and answer
       if: github.event_name == 'workflow_dispatch' && inputs.live_proof
+      env:
+        PROOF_THREAD_TS: ${{ inputs.proof_thread_ts }}
       run: uv run python scripts/prove_cmp_slack.py
