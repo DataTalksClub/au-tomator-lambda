@@ -16,10 +16,11 @@ QUESTION = 'Have the peer review items for Project 1 been assigned?'
 
 
 def slack_call(token, method, **payload):
-    response = requests.post(
-        f'https://slack.com/api/{method}', json=payload,
-        headers={'Authorization': f'Bearer {token}'}, timeout=(3, 10),
-    )
+    arguments = {'headers': {'Authorization': f'Bearer {token}'}, 'timeout': (3, 10)}
+    if method == 'conversations.replies':
+        response = requests.get(f'https://slack.com/api/{method}', params=payload, **arguments)
+    else:
+        response = requests.post(f'https://slack.com/api/{method}', json=payload, **arguments)
     response.raise_for_status()
     data = response.json()
     if not data.get('ok'):
@@ -50,19 +51,23 @@ def main():
     user = slack_call(user_token, 'auth.test')
     if user.get('bot_id') or user['team_id'] != environment['CMP_SLACK_TEAM_ID']:
         raise RuntimeError('Proof requires an authenticated workspace user')
-    root = slack_call(
-        user_token, 'chat.postMessage', channel=CHANNEL,
-        text=f'[CMP integration test] <@{bot["user_id"]}> {QUESTION}',
-        unfurl_links=False, unfurl_media=False,
-    )
-    ts = root['ts']
+    ts = os.environ.get('PROOF_THREAD_TS', '').strip()
+    if not ts:
+        root = slack_call(
+            user_token, 'chat.postMessage', channel=CHANNEL,
+            text=f'[CMP integration test] <@{bot["user_id"]}> {QUESTION}',
+            unfurl_links=False, unfurl_media=False,
+        )
+        ts = root['ts']
     print(f'Live question: {QUESTION}', flush=True)
     print(f'Thread: https://datatalks-club.slack.com/archives/{CHANNEL}/p{ts.replace(".", "")}', flush=True)
     # Polling is bounded and does not invoke Lambda directly: this exercises
     # Slack event delivery, router, automator, CMP, FAQ model and Slack reply.
     deadline = time.monotonic() + 150
     while time.monotonic() < deadline:
-        replies = slack_call(bot_token, 'conversations.replies', channel=CHANNEL, ts=ts)['messages']
+        # Channel thread history requires a user token; the bot token remains
+        # responsible for identifying the actual answer author.
+        replies = slack_call(user_token, 'conversations.replies', channel=CHANNEL, ts=ts)['messages']
         for message in replies:
             if message.get('ts') == ts or message.get('user') != bot['user_id']:
                 continue
