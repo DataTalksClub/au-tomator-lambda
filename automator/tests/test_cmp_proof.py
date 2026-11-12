@@ -58,4 +58,14 @@ class TestLiveProofSlackTransport(unittest.TestCase):
 
         call.side_effect = api
         proof.main()
-        self.assertEqual(call.call_count, 3)
+        self.assertEqual(call.call_count, 4)
+
+    @patch.object(proof, 'slack_call')
+    def test_question_explicitly_uses_real_user_authorship(self, call):
+        call.return_value = {'ts': '123.2', 'message': {'user': 'U123'}}
+        self.assertEqual(proof.ask_as_user('user-token', 'U123', 'UBOT', '123.1'), '123.2')
+        self.assertIs(call.call_args.kwargs['as_user'], True)
+        self.assertEqual(call.call_args.kwargs['thread_ts'], '123.1')
+        call.return_value = {'ts': '123.2', 'message': {'user': 'U123', 'bot_id': 'B123'}}
+        with self.assertRaisesRegex(RuntimeError, 'authenticated user'):
+            proof.ask_as_user('user-token', 'U123', 'UBOT', '123.1')

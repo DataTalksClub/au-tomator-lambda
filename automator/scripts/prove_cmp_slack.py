@@ -28,6 +28,22 @@ def slack_call(token, method, **payload):
     return data
 
 
+def ask_as_user(user_token, user_id, bot_id, thread_ts=None):
+    payload = {
+        'channel': CHANNEL, 'as_user': True,
+        'text': f'[CMP integration test] <@{bot_id}> {QUESTION}',
+        'unfurl_links': False, 'unfurl_media': False,
+    }
+    if thread_ts:
+        payload['thread_ts'] = thread_ts
+    result = slack_call(user_token, 'chat.postMessage', **payload)
+    message = result.get('message') or {}
+    if (message.get('user') != user_id or message.get('bot_id')
+            or message.get('subtype') == 'bot_message'):
+        raise RuntimeError('Slack did not author the proof question as the authenticated user')
+    return result['ts']
+
+
 def main():
     client = boto3.client('lambda', region_name=os.environ.get('AWS_REGION', 'eu-west-1'))
     environment = client.get_function_configuration(
@@ -53,12 +69,20 @@ def main():
         raise RuntimeError('Proof requires an authenticated workspace user')
     ts = os.environ.get('PROOF_THREAD_TS', '').strip()
     if not ts:
-        root = slack_call(
-            user_token, 'chat.postMessage', channel=CHANNEL,
-            text=f'[CMP integration test] <@{bot["user_id"]}> {QUESTION}',
-            unfurl_links=False, unfurl_media=False,
+        ts = ask_as_user(user_token, user['user_id'], bot['user_id'])
+    else:
+        existing = slack_call(bot_token, 'conversations.replies', channel=CHANNEL, ts=ts)['messages']
+        answered = any(
+            message.get('ts') != ts and message.get('user') == bot['user_id']
+            and 'courses.datatalks.club/' in json.dumps(message)
+            for message in existing
         )
-        ts = root['ts']
+        if not answered:
+            # Legacy Slack user tokens can default to bot authorship. Such a
+            # mention is intentionally ignored by the bot. Explicitly ask as
+            # the authenticated user inside the same labelled test thread.
+            ask_as_user(user_token, user['user_id'], bot['user_id'], thread_ts=ts)
+            print('Asked again in the existing thread with verified user authorship.', flush=True)
     print(f'Live question: {QUESTION}', flush=True)
     print(f'Thread: https://datatalks-club.slack.com/archives/{CHANNEL}/p{ts.replace(".", "")}', flush=True)
     # Polling is bounded and does not invoke Lambda directly: this exercises
