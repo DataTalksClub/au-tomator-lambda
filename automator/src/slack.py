@@ -14,6 +14,27 @@ USER_SLACK_TOKEN = os.getenv('USER_SLACK_TOKEN')
 deletion_context = ContextVar('deletion_context', default=None)
 
 
+def _private_post(method, payload):
+    # These messages may contain student counts: no message/body logging.
+    response = requests.post(
+        f'https://slack.com/api/{method}', json=payload,
+        headers={'Authorization': f'Bearer {SLACK_TOKEN}'}, timeout=(2, 5),
+    )
+    response.raise_for_status()
+    if response.json().get('ok') is not True:
+        raise RuntimeError('Private Slack delivery failed')
+
+
+def post_private_message(user, message):
+    _private_post('chat.postMessage', {'channel': user, 'text': message})
+
+
+def post_ephemeral(channel, user, thread_ts, message):
+    _private_post('chat.postEphemeral', {
+        'channel': channel, 'user': user, 'thread_ts': thread_ts, 'text': message,
+    })
+
+
 def alert_deletion_audit(tag, channel, ts, attempt=0):
     logger.error(json.dumps({
         'tag': tag, 'channel': channel, 'ts': ts, 'attempt': attempt,

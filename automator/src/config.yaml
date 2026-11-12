@@ -21,6 +21,16 @@ faq_assistant:
     course-ai-dev-tools-zoomcamp: ai-dev-tools-zoomcamp
     course-stock-markets-analytics-zoomcamp: stock-markets-analytics-zoomcamp
 
+# Exact cohorts are deliberate: never infer a cohort from the current year.
+cmp:
+  courses:
+    data-engineering-zoomcamp: de-zoomcamp-2026
+    mlops-zoomcamp: mlops-zoomcamp-2025
+    llm-zoomcamp: llm-zoomcamp-2026
+    machine-learning-zoomcamp: ml-zoomcamp-2026
+    ai-dev-tools-zoomcamp: ai-dev-tools-2026
+    stock-markets-analytics-zoomcamp: sma-zoomcamp-2026
+
 reactions:
   - reaction: dont-ask-to-ask-just-ask
     type: SLACK_POST

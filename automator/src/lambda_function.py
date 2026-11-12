@@ -10,6 +10,7 @@ import yaml
 import util
 import groqu
 import slack
+import cmp_context
 from logs import logger
 
 
@@ -139,7 +140,7 @@ def format_faq_assistant_error_message(payload):
     )
 
 
-def post_faq_assistant_answer(channel, thread_ts, payload):
+def post_faq_assistant_answer(channel, thread_ts, payload, student_user=None):
     if not channel or not thread_ts:
         logger.info('FAQ assistant request missing channel or ts')
         return
@@ -154,6 +155,11 @@ def post_faq_assistant_answer(channel, thread_ts, payload):
     logger.info(
         f"FAQ assistant request: scope={payload['scope']} "
         f"course={payload.get('course', '')}"
+    )
+    payload, student_counts = cmp_context.enrich(payload, config, slack, student_user)
+    cmp_context.send_student_counts(
+        slack, channel, thread_ts, student_user, payload, student_counts,
+        config.get('admins', []),
     )
     try:
         answer = call_faq_assistant(payload)
@@ -180,7 +186,7 @@ def post_faq_assistant_answer(channel, thread_ts, payload):
 
 
 # Display labels for the FAQ assistant's structured `source` types.
-FAQ_SOURCE_LABELS = {'faq': 'FAQ', 'docs': 'docs', 'course-repo': 'repo'}
+FAQ_SOURCE_LABELS = {'faq': 'FAQ', 'docs': 'docs', 'course-repo': 'repo', 'cmp': 'CMP'}
 
 
 def format_faq_sources(sources, found_answer=True):
@@ -312,7 +318,7 @@ def handle_app_mention(event):
     else:
         payload = build_faq_assistant_payload(event)
 
-    post_faq_assistant_answer(channel, thread_ts, payload)
+    post_faq_assistant_answer(channel, thread_ts, payload, student_user=event.get('user'))
 
 
 def handle_faq_assistant_reaction(event, reaction_config):
