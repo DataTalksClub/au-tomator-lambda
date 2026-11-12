@@ -65,9 +65,9 @@ def main():
     # Slack event delivery, router, automator, CMP, FAQ model and Slack reply.
     deadline = time.monotonic() + 150
     while time.monotonic() < deadline:
-        # Channel thread history requires a user token; the bot token remains
-        # responsible for identifying the actual answer author.
-        replies = slack_call(user_token, 'conversations.replies', channel=CHANNEL, ts=ts)['messages']
+        # Use the app's channel-history capability, as the production Slack
+        # helper does; the user token is used only to ask the question.
+        replies = slack_call(bot_token, 'conversations.replies', channel=CHANNEL, ts=ts)['messages']
         for message in replies:
             if message.get('ts') == ts or message.get('user') != bot['user_id']:
                 continue
