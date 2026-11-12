@@ -1,6 +1,8 @@
 """Bounded GET of CMP state. No model-selected tools or CMP writes."""
 import os
 import re
+import time
+from datetime import datetime
 from urllib.parse import urlparse
 
 import requests
@@ -16,16 +18,34 @@ PUBLIC_FIELDS = {
                  'peer_review_due_date', 'peer_review_open', 'peer_review_opens_at',
                  'assignments_created', 'source_url'),
 }
+BOOLEAN_FIELDS = {'finished', 'peer_review_open', 'assignments_created'}
+DATE_FIELDS = {'starts_at', 'start_date', 'end_date', 'due_date',
+               'submission_due_date', 'peer_review_due_date', 'peer_review_opens_at'}
+
+
+def _date(value):
+    if value is not None:
+        if not isinstance(value, str) or len(value) > 64:
+            raise ValueError('Invalid CMP date')
+        datetime.fromisoformat(value.replace('Z', '+00:00'))
 
 
 def _public_item(item, fields):
     if not isinstance(item, dict) or any(key not in item for key in fields):
         raise ValueError('Incomplete CMP state')
     result = {key: item[key] for key in fields}
-    if any(isinstance(value, (dict, list)) for value in result.values()):
-        raise ValueError('Invalid CMP field')
+    for key, value in result.items():
+        if key in BOOLEAN_FIELDS:
+            if type(value) is not bool:
+                raise ValueError('Invalid CMP boolean')
+        elif key in DATE_FIELDS:
+            _date(value)
+        elif not isinstance(value, str) or not value or len(value) > 300:
+            raise ValueError('Invalid CMP text')
     source = urlparse(result['source_url'])
-    if source.scheme != 'https' or source.netloc != 'courses.datatalks.club':
+    if (source.scheme != 'https' or source.netloc != 'courses.datatalks.club'
+            or source.query or source.fragment or '%' in source.path
+            or any(part in {'.', '..'} for part in source.path.split('/'))):
         raise ValueError('Invalid CMP source')
     return result
 
@@ -44,6 +64,7 @@ def fetch_state(cohort, user=None):
         if not re.fullmatch(r'U[A-Z0-9]+', user):
             raise ValueError('Invalid Slack user')
         params = {'slack_team_id': team, 'slack_user_id': user}
+    deadline = time.monotonic() + 7
     with requests.get(
         f'{BASE_URL}/api/bot/courses/{cohort}/state/',
         params=params, headers={'Authorization': f'Bearer {token}'},
@@ -53,6 +74,8 @@ def fetch_state(cohort, user=None):
             raise ValueError(f'CMP HTTP {response.status_code}')
         body = bytearray()
         for chunk in response.iter_content(8192):
+            if time.monotonic() > deadline:
+                raise requests.Timeout('CMP response deadline exceeded')
             body.extend(chunk)
             if len(body) > 65536:
                 raise ValueError('CMP response too large')
@@ -60,6 +83,9 @@ def fetch_state(cohort, user=None):
     state = json.loads(body)
     if state.get('schema_version') != 1 or state.get('course', {}).get('slug') != cohort:
         raise ValueError('CMP cohort/schema mismatch')
+    _date(state['fetched_at'])
+    if state['fetched_at'] is None:
+        raise ValueError('CMP fetch time missing')
     public = {'schema_version': 1, 'fetched_at': state['fetched_at']}
     public['course'] = _public_item(state['course'], PUBLIC_FIELDS['course'])
     for key in ('homeworks', 'projects'):
@@ -67,6 +93,9 @@ def fetch_state(cohort, user=None):
         if not isinstance(items, list) or len(items) > 100:
             raise ValueError('Invalid CMP item count')
         public[key] = [_public_item(item, PUBLIC_FIELDS[key]) for item in items]
+    sources = [public['course'], *public['homeworks'], *public['projects']]
+    if any(not urlparse(item['source_url']).path.startswith(f'/{cohort}/') for item in sources):
+        raise ValueError('CMP source cohort mismatch')
     # Private data never enters the LLM request, its traces, or the public reply.
     private = None
     student = state.get('student') or {}

@@ -93,7 +93,8 @@ class TestCMPContext(unittest.TestCase):
 
     def test_malformed_and_failure_cases_alert_and_fallback(self):
         cases = []
-        for path, bad in [('schema_version', 99), ('projects', 'bad')]:
+        for path, bad in [('schema_version', 99), ('projects', 'bad'),
+                          ('fetched_at', {'student': 'secret'}), ('fetched_at', None)]:
             value = state()
             value[path] = bad
             cases.append(value)
@@ -155,6 +156,11 @@ class TestCMPContext(unittest.TestCase):
         self.response.iter_content.return_value = [b'x' * 65537]
         with self.assertRaises(ValueError):
             cmp_context.fetch_state('ml-zoomcamp-2026')
+
+    def test_slow_stream_rejected(self):
+        with patch('cmp_context.time.monotonic', side_effect=[0, 8]):
+            with self.assertRaises(cmp_context.requests.Timeout):
+                cmp_context.fetch_state('ml-zoomcamp-2026')
         self.response.status_code = 302
         with self.assertRaises(ValueError):
             cmp_context.fetch_state('ml-zoomcamp-2026')

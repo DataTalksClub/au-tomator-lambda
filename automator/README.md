@@ -41,7 +41,10 @@ block deployment. The token has no authority over CMP's administrative API.
 During local development the integration defaults off.
 
 Fetches have 2-second connect and 5-second read timeouts, reject redirects,
-and cap the response at 64 KiB. Missing mappings/configuration, HTTP/validation
+cap the response at 64 KiB, and enforce a 7-second streaming deadline.
+Deployment sets the Lambda timeout to 120 seconds to leave room for the existing
+55-second FAQ request and the bounded CMP/alert calls.
+Missing mappings/configuration, HTTP/validation
 failures and private-delivery failures emit `CMP_CONTEXT_FAILED` and notify
 configured admins in Slack; failed alerts emit `CMP_ALERT_DELIVERY_FAILED`.
 CMP failures continue with the existing FAQ request. Alert and private-count

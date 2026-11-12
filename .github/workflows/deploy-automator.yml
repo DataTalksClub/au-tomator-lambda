@@ -66,6 +66,7 @@ jobs:
           uv run python scripts/merge_cmp_config.py > "$audit_env"
         aws lambda update-function-configuration \
           --function-name "$FUNCTION_NAME" --region "$AWS_REGION" \
+          --timeout 120 \
           --environment "file://$audit_env" --query 'LastUpdateStatus' --output text
         aws lambda wait function-updated --function-name "$FUNCTION_NAME" --region "$AWS_REGION"
 
