@@ -33,6 +33,18 @@ def main():
         FunctionName='automator-process-reaction')['Environment']['Variables']
     if environment.get('CMP_CONTEXT_ENABLED') != '1':
         raise RuntimeError('CMP integration is not enabled')
+    snapshot = requests.get(
+        'https://courses.datatalks.club/api/bot/courses/ml-zoomcamp-2026/state/',
+        headers={'Authorization': f'Bearer {environment["CMP_BOT_READ_TOKEN"]}'},
+        timeout=(3, 10), allow_redirects=False,
+    )
+    snapshot.raise_for_status()
+    public = snapshot.json()
+    print(json.dumps({'observed_cmp_projects': [
+        {key: project[key] for key in ('title', 'state', 'peer_review_open',
+                                     'assignments_created', 'peer_review_due_date')}
+        for project in public['projects']
+    ]}, ensure_ascii=False), flush=True)
     bot_token, user_token = environment['SLACK_TOKEN'], environment['USER_SLACK_TOKEN']
     bot = slack_call(bot_token, 'auth.test')
     user = slack_call(user_token, 'auth.test')
@@ -59,6 +71,11 @@ def main():
                 text += '\n' + (block.get('text') or {}).get('text', '')
             if 'courses.datatalks.club/' not in text or 'peer review' not in text.lower().replace('-', ' '):
                 raise RuntimeError('Bot reply lacks factual CMP citation/peer review answer')
+            if any(phrase in text.lower() for phrase in (
+                "can't confirm", 'cannot confirm', "couldn't find a current value",
+                "can't verify", 'cannot verify',
+            )):
+                raise RuntimeError('Bot returned generic uncertainty despite live CMP state')
             if 'assigned_count' in text or 'pending_count' in text:
                 raise RuntimeError('Private field leaked into public reply')
             print(json.dumps({'answer': text, 'reply_ts': message['ts']}, ensure_ascii=False), flush=True)

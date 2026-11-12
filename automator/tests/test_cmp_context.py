@@ -152,6 +152,22 @@ class TestCMPContext(unittest.TestCase):
             self.slack.post_message_to_thread.assert_called_once()
             self.slack.post_private_message.assert_called_once()
 
+    def test_student_identity_requires_actual_envelope_team(self):
+        import importlib.util
+        src = Path(__file__).resolve().parents[1] / 'src'
+        with patch.dict(os.environ, {'CONFIG_FILE': str(src / 'config.yaml')}):
+            spec = importlib.util.spec_from_file_location('cmp_team_lambda', src / 'lambda_function.py')
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+        event = {'type': 'app_mention', 'channel': 'C0288NJ5XSA', 'user': 'U123',
+                 'ts': '123.1', 'text': '<@UBOT> Were peer reviews assigned?'}
+        with patch.object(module, 'post_faq_assistant_answer') as answer:
+            for team in (None, 'TOTHER'):
+                module.run({'team_id': team, 'event': event})
+                self.assertIsNone(answer.call_args.kwargs['student_user'])
+            module.run({'team_id': 'T123', 'event': event})
+            self.assertEqual(answer.call_args.kwargs['student_user'], 'U123')
+
     def test_oversized_and_redirect_responses_rejected(self):
         self.response.iter_content.return_value = [b'x' * 65537]
         with self.assertRaises(ValueError):

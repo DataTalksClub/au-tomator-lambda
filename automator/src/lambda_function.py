@@ -293,7 +293,7 @@ def build_question_from_thread(channel, thread_ts, mention_ts=None):
     )
 
 
-def handle_app_mention(event):
+def handle_app_mention(event, team_id=None):
     if event.get('bot_id'):
         logger.info('Ignoring bot app_mention')
         return
@@ -318,7 +318,10 @@ def handle_app_mention(event):
     else:
         payload = build_faq_assistant_payload(event)
 
-    post_faq_assistant_answer(channel, thread_ts, payload, student_user=event.get('user'))
+    student_user = None
+    if team_id and team_id == os.getenv('CMP_SLACK_TEAM_ID'):
+        student_user = event.get('user')
+    post_faq_assistant_answer(channel, thread_ts, payload, student_user=student_user)
 
 
 def handle_faq_assistant_reaction(event, reaction_config):
@@ -799,7 +802,7 @@ def run(body):
     event_type = event.get('type')
 
     if event_type == 'app_mention':
-        handle_app_mention(event)
+        handle_app_mention(event, team_id=body.get('team_id'))
         return
 
     if event_type == 'reaction_added':
