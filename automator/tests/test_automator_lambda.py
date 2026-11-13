@@ -1640,3 +1640,52 @@ class TestSlackThreadReplies(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestAppMentionAuthorship(unittest.TestCase):
+    """Regression for t3289u: CMP proof mentions posted with the app's user token."""
+
+    AUTHORIZATIONS = [{'team_id': 'T01', 'user_id': 'UAUTOMATOR', 'is_bot': True}]
+
+    def body(self, **event_overrides):
+        # Shape copied from the 2026-11-12 16:34 UTC CloudWatch payload.
+        event = {
+            'type': 'app_mention', 'user': 'UADMIN', 'ts': '1794501289.216029',
+            'bot_id': 'BAUTOMATOR', 'app_id': 'AAUTOMATOR',
+            'bot_profile': {'id': 'BAUTOMATOR', 'app_id': 'AAUTOMATOR'},
+            'text': '[CMP integration test] <@UAUTOMATOR> Have the peer review items for Project 1 been assigned?',
+            'thread_ts': '1794500363.288659', 'channel': 'C0288NJ5XSA',
+        }
+        event.update(event_overrides)
+        return {
+            'team_id': 'T01', 'api_app_id': 'AAUTOMATOR', 'type': 'event_callback',
+            'event': event, 'authorizations': self.AUTHORIZATIONS,
+        }
+
+    @patch('automator_lambda_function.post_faq_assistant_answer')
+    def test_human_mention_through_own_app_user_token_is_answered(self, post):
+        lambda_function.run(self.body())
+        post.assert_called_once()
+        self.assertEqual(post.call_args.args[0], 'C0288NJ5XSA')
+        self.assertEqual(post.call_args.args[1], '1794500363.288659')
+
+    @patch('automator_lambda_function.post_faq_assistant_answer')
+    def test_own_bot_user_mention_is_ignored(self, post):
+        lambda_function.run(self.body(user='UAUTOMATOR'))
+        post.assert_not_called()
+
+    @patch('automator_lambda_function.post_faq_assistant_answer')
+    def test_other_app_bot_mention_is_ignored(self, post):
+        lambda_function.run(self.body(user='UOTHERBOT', bot_id='BOTHER', app_id='AOTHER'))
+        post.assert_not_called()
+
+    @patch('automator_lambda_function.post_faq_assistant_answer')
+    def test_bot_message_without_human_author_is_ignored(self, post):
+        lambda_function.run(self.body(user=None, subtype='bot_message'))
+        post.assert_not_called()
+
+    def test_bot_id_without_authorizations_fails_closed(self):
+        event = self.body()['event']
+        self.assertTrue(lambda_function.is_ignored_bot_mention(event, 'AAUTOMATOR', None))
+        self.assertFalse(lambda_function.is_ignored_bot_mention(
+            {'user': 'UHUMAN', 'text': 'hi'}, 'AAUTOMATOR', None))

@@ -293,8 +293,33 @@ def build_question_from_thread(channel, thread_ts, mention_ts=None):
     )
 
 
-def handle_app_mention(event, team_id=None):
-    if event.get('bot_id'):
+def is_ignored_bot_mention(event, api_app_id=None, authorizations=None):
+    """Return True when an app_mention was not written by a human.
+
+    A workspace user who posts through this app's own user token (for
+    example the CMP live proof) gets this app's ``bot_id`` attached to the
+    message even though ``user`` is the human. Those mentions are real
+    questions. Mentions authored by this app's bot user, by other apps or
+    without a human author are ignored so the bot never answers itself.
+    """
+    if event.get('subtype') == 'bot_message':
+        return True
+    bot_user_ids = {
+        auth.get('user_id') for auth in (authorizations or [])
+        if auth.get('is_bot') and auth.get('user_id')
+    }
+    if event.get('user') and event['user'] in bot_user_ids:
+        return True
+    if not event.get('bot_id'):
+        return False
+    if not event.get('user'):
+        return True
+    own_app = bool(api_app_id) and event.get('app_id') == api_app_id
+    return not (own_app and bot_user_ids)
+
+
+def handle_app_mention(event, team_id=None, api_app_id=None, authorizations=None):
+    if is_ignored_bot_mention(event, api_app_id, authorizations):
         logger.info('Ignoring bot app_mention')
         return
 
@@ -802,7 +827,10 @@ def run(body):
     event_type = event.get('type')
 
     if event_type == 'app_mention':
-        handle_app_mention(event, team_id=body.get('team_id'))
+        handle_app_mention(
+            event, team_id=body.get('team_id'), api_app_id=body.get('api_app_id'),
+            authorizations=body.get('authorizations'),
+        )
         return
 
     if event_type == 'reaction_added':

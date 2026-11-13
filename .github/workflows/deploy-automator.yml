@@ -8,11 +8,11 @@ on:
   workflow_dispatch:
     inputs:
       live_proof:
-        description: 'Post a labelled CMP integration test thread in the ML course channel'
+        description: 'Post a labelled CMP integration test question in the ML course channel, verify the bot reply, then delete both'
         type: boolean
         default: false
-      proof_thread_ts:
-        description: 'Existing ML test thread to inspect instead of posting a new question'
+      proof_keep_seconds:
+        description: 'Seconds to keep the verified question and reply visible before cleanup'
         type: string
         default: ''
 
@@ -94,5 +94,5 @@ jobs:
     - name: Verify real Slack question and answer
       if: github.event_name == 'workflow_dispatch' && inputs.live_proof
       env:
-        PROOF_THREAD_TS: ${{ inputs.proof_thread_ts }}
+        PROOF_KEEP_SECONDS: ${{ inputs.proof_keep_seconds }}
       run: uv run python scripts/prove_cmp_slack.py
