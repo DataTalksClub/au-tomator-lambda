@@ -13,8 +13,20 @@ import boto3
 import requests
 
 
-CHANNEL = 'C0288NJ5XSA'
-QUESTION = 'Have the peer review items for Project 1 been assigned?'
+# PROOF_COURSE selects which course channel the labelled question goes to.
+PROFILES = {
+    'ml': {'channel': 'C0288NJ5XSA', 'cohort': 'ml-zoomcamp-2026',
+           'faq_course': 'machine-learning-zoomcamp',
+           'question': 'Have the peer review items for Project 1 been assigned?',
+           'topic': 'peer review'},
+    'genmedia': {'channel': 'C0CEG1BUDKL', 'cohort': 'production-ai-agents-generative-media',
+                 'faq_course': 'production-ai-agents-generative-media',
+                 'question': 'When is the Module 1 homework due?',
+                 'topic': 'homework'},
+}
+PROFILE = PROFILES['ml']
+CHANNEL = PROFILE['channel']
+QUESTION = PROFILE['question']
 
 
 def slack_call(token, method, **payload):
@@ -67,7 +79,8 @@ def check_answer(message):
     text = message.get('text', '')
     for block in message.get('blocks', []):
         text += '\n' + (block.get('text') or {}).get('text', '')
-    if 'courses.datatalks.club/' not in text or 'peer review' not in text.lower().replace('-', ' '):
+    if (f"courses.datatalks.club/{PROFILE['cohort']}/" not in text
+            or PROFILE['topic'] not in text.lower().replace('-', ' ')):
         raise RuntimeError('Bot reply lacks factual CMP citation/peer review answer')
     if any(phrase in text.lower() for phrase in (
         "can't confirm", 'cannot confirm', "couldn't find a current value",
@@ -105,14 +118,33 @@ def cleanup(bot_token, user_token, ts, bot_user_id):
     print(json.dumps({'cleaned_up': {'question_ts': ts, 'reply_ts': replies}}), flush=True)
 
 
+def assert_no_cmp_failure(since_ms, course):
+    """The answer must have used CMP context: no CMP_CONTEXT_FAILED for this course."""
+    logs = boto3.client('logs', region_name=os.environ.get('AWS_REGION', 'eu-west-1'))
+    events = logs.filter_log_events(
+        logGroupName='/aws/lambda/automator-process-reaction', startTime=since_ms,
+        filterPattern='"CMP_CONTEXT_FAILED"')['events']
+    failures = [e['message'].strip() for e in events if f'course={course} ' in e['message']]
+    if failures:
+        raise RuntimeError(f'CMP context failed during proof: {failures}')
+    print(json.dumps({'cmp_context_failed_events': 0, 'course': course}), flush=True)
+
+
+def select_profile(name):
+    global PROFILE, CHANNEL, QUESTION
+    PROFILE = PROFILES[name]
+    CHANNEL, QUESTION = PROFILE['channel'], PROFILE['question']
+
+
 def main():
+    select_profile(os.environ.get('PROOF_COURSE') or 'ml')
     client = boto3.client('lambda', region_name=os.environ.get('AWS_REGION', 'eu-west-1'))
     environment = client.get_function_configuration(
         FunctionName='automator-process-reaction')['Environment']['Variables']
     if environment.get('CMP_CONTEXT_ENABLED') != '1':
         raise RuntimeError('CMP integration is not enabled')
     snapshot = requests.get(
-        'https://courses.datatalks.club/api/bot/courses/ml-zoomcamp-2026/state/',
+        f"https://courses.datatalks.club/api/bot/courses/{PROFILE['cohort']}/state/",
         headers={'Authorization': f'Bearer {environment["CMP_BOT_READ_TOKEN"]}'},
         timeout=(3, 10), allow_redirects=False,
     )
@@ -122,6 +154,9 @@ def main():
         {key: project[key] for key in ('title', 'state', 'peer_review_open',
                                      'assignments_created', 'peer_review_due_date')}
         for project in public['projects']
+    ], 'observed_cmp_homeworks': [
+        {key: homework[key] for key in ('title', 'state', 'due_date')}
+        for homework in public.get('homeworks', [])
     ]}, ensure_ascii=False), flush=True)
     bot_token, user_token = environment['SLACK_TOKEN'], environment['USER_SLACK_TOKEN']
     bot = slack_call(bot_token, 'auth.test')
@@ -129,6 +164,7 @@ def main():
     if user.get('bot_id') or user['team_id'] != environment['CMP_SLACK_TEAM_ID']:
         raise RuntimeError('Proof requires an authenticated workspace user')
     bot_info = slack_call(bot_token, 'bots.info', bot=bot['bot_id'])
+    asked_ms = int(time.time() * 1000) - 5000
     ts = ask_as_user(user_token, user['user_id'], bot['user_id'], bot_info['bot']['app_id'])
     print(f'Live question: {QUESTION}', flush=True)
     print(f'Thread: https://datatalks-club.slack.com/archives/{CHANNEL}/p{ts.replace(".", "")}', flush=True)
@@ -136,6 +172,8 @@ def main():
         reply = wait_for_answer(bot_token, ts, bot['user_id'])
         text = check_answer(reply)
         print(json.dumps({'answer': text, 'reply_ts': reply['ts']}, ensure_ascii=False), flush=True)
+        time.sleep(10)  # let the automator's log lines reach CloudWatch
+        assert_no_cmp_failure(asked_ms, PROFILE['faq_course'])
         if os.environ.get('PROOF_KEEP_SECONDS'):
             time.sleep(int(os.environ['PROOF_KEEP_SECONDS']))
     finally:

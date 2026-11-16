@@ -1697,3 +1697,16 @@ class TestAppMentionAuthorship(unittest.TestCase):
         self.assertTrue(lambda_function.is_ignored_bot_mention(event, 'AAUTOMATOR', None))
         self.assertFalse(lambda_function.is_ignored_bot_mention(
             {'user': 'UHUMAN', 'text': 'hi'}, 'AAUTOMATOR', None))
+
+
+class TestDuplicateEvents(unittest.TestCase):
+    def test_same_slack_event_is_processed_once(self):
+        lambda_function._seen_event_ids.clear()
+        body = {'event_id': 'Ev123', 'event': {
+            'type': 'app_mention', 'channel': 'C0CEG1BUDKL', 'user': 'U1',
+            'ts': '1.1', 'text': '<@UBOT> question'}}
+        with patch.object(lambda_function, 'handle_app_mention') as handle:
+            lambda_function.run(body)
+            lambda_function.run(body)
+            lambda_function.run({**body, 'event_id': 'Ev124'})
+        self.assertEqual(handle.call_count, 2)

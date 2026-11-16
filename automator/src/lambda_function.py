@@ -821,8 +821,32 @@ def process_reaction(body, event):
             logger.info(f"no handler for {action_type}")
 
 
+# Slack event_ids handled by this warm container. Lambda retries async
+# invocations (and Slack may redeliver), so the same event can arrive twice;
+# answering or alerting twice for one message is noise.
+_seen_event_ids = {}
+SEEN_EVENT_TTL_SECONDS = 6 * 3600
+
+
+def is_duplicate_event(body):
+    event_id = body.get('event_id')
+    if not event_id:
+        return False
+    now = time.monotonic()
+    for key, seen_at in list(_seen_event_ids.items()):
+        if now - seen_at > SEEN_EVENT_TTL_SECONDS:
+            del _seen_event_ids[key]
+    if event_id in _seen_event_ids:
+        return True
+    _seen_event_ids[event_id] = now
+    return False
+
+
 def run(body):
     print(json.dumps(body))
+    if is_duplicate_event(body):
+        logger.info(f"duplicate Slack event ignored: {body.get('event_id')}")
+        return
     event = body['event']
     event_type = event.get('type')
 

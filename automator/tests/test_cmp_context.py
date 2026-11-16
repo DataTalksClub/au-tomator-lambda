@@ -45,6 +45,7 @@ class TestCMPContext(unittest.TestCase):
         self.config = {'admins': ['UADMIN'], 'cmp': {'courses': {
             'machine-learning-zoomcamp': 'ml-zoomcamp-2026'}}}
         self.slack = MagicMock()
+        cmp_context._recent_alerts.clear()
 
     def set_state(self, value):
         self.response.iter_content.return_value = [json.dumps(value).encode()]
@@ -111,6 +112,7 @@ class TestCMPContext(unittest.TestCase):
             with self.subTest(value=value):
                 self.set_state(value)
                 self.slack.reset_mock()
+                cmp_context._recent_alerts.clear()
                 payload, counts = cmp_context.enrich(self.payload, self.config, self.slack, 'U123')
                 self.assertEqual(payload, self.payload)
                 self.assertIsNone(counts)
@@ -188,10 +190,44 @@ class TestCMPContext(unittest.TestCase):
         self.get.assert_not_called()
         self.slack.post_private_message.assert_called_once()
 
-    def test_unknown_course_alerts(self):
+    def test_unknown_course_not_in_cmp_alerts_unmapped(self):
+        self.response.status_code = 404
         cmp_context.enrich(self.payload, {'admins': ['UADMIN']}, self.slack)
+        self.assertEqual(self.get.call_args.args[0],
+                         'https://courses.datatalks.club/api/bot/courses/machine-learning-zoomcamp/state/')
         self.slack.post_private_message.assert_called_once()
-        self.get.assert_not_called()
+        self.assertIn('reason=unmapped_course', self.slack.post_private_message.call_args.args[1])
+
+    def test_unmapped_course_uses_identical_cmp_slug(self):
+        slug = 'production-ai-agents-generative-media'
+        value = state()
+        url = f'https://courses.datatalks.club/{slug}/'
+        value['course'].update(slug=slug, source_url=url)
+        value['projects'][0]['source_url'] = url
+        self.set_state(value)
+        payload, _ = cmp_context.enrich({**self.payload, 'course': slug},
+                                        {'admins': ['UADMIN']}, self.slack)
+        self.assertEqual(payload['course_state']['course']['slug'], slug)
+        self.slack.post_private_message.assert_not_called()
+
+    def test_repeated_alert_for_same_course_and_reason_is_sent_once(self):
+        self.get.side_effect = cmp_context.requests.Timeout()
+        with patch.object(cmp_context.logger, 'error') as log:
+            for _ in range(3):
+                cmp_context.enrich(self.payload, self.config, self.slack)
+        self.assertEqual(self.slack.post_private_message.call_count, 1)
+        self.assertEqual(log.call_count, 3)  # every failure is still logged
+        cmp_context.enrich({**self.payload, 'course': 'other'}, self.config, self.slack)
+        self.assertEqual(self.slack.post_private_message.call_count, 2)
+
+    def test_every_faq_course_has_explicit_cmp_cohort(self):
+        import yaml
+        src = Path(__file__).resolve().parents[1] / 'src'
+        config = yaml.safe_load((src / 'config.yaml').read_text())
+        faq_courses = set(config['faq_assistant']['courses'].values())
+        self.assertEqual(faq_courses - set(config['cmp']['courses']), set())
+        self.assertEqual(config['cmp']['courses']['production-ai-agents-generative-media'],
+                         'production-ai-agents-generative-media')
 
     def test_ephemeral_failure_never_posts_counts_publicly(self):
         payload, counts = cmp_context.enrich(self.payload, self.config, self.slack, 'U123')
