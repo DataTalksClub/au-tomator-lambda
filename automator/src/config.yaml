@@ -32,6 +32,7 @@ cmp:
     machine-learning-zoomcamp: ml-zoomcamp-2026
     ai-dev-tools-zoomcamp: ai-dev-tools-2026
     stock-markets-analytics-zoomcamp: sma-zoomcamp-2026
+    production-ai-agents-generative-media: production-ai-agents-generative-media
 
 reactions:
   - reaction: dont-ask-to-ask-just-ask

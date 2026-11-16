@@ -35,6 +35,11 @@ class TestLiveProofSlackTransport(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'missing_scope'):
             proof.slack_call('test-user-token', 'conversations.replies', channel='C123', ts='123.1')
 
+    def setUp(self):
+        logs = patch.object(proof, 'assert_no_cmp_failure').start()
+        self.addCleanup(patch.stopall)
+        self.no_failure = logs
+
     def run_main(self, client, get, call, replies, sleep=None):
         client.return_value.get_function_configuration.return_value = {'Environment': {'Variables': {
             'CMP_CONTEXT_ENABLED': '1', 'CMP_BOT_READ_TOKEN': 'cmp',
@@ -121,3 +126,28 @@ class TestLiveProofSlackTransport(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'authenticated user'):
             proof.ask_as_user('user-token', 'U123', 'UBOT', 'AAPP')
         self.assertEqual(call.call_args.args[1], 'chat.delete')
+
+
+class TestProofCourseProfiles(unittest.TestCase):
+    def tearDown(self):
+        proof.select_profile('ml')
+
+    def test_genmedia_profile_requires_its_cmp_citation(self):
+        proof.select_profile('genmedia')
+        self.assertEqual(proof.CHANNEL, 'C0CEG1BUDKL')
+        good = {'text': 'The Module 1 homework is due 23 Nov. '
+                        'https://courses.datatalks.club/production-ai-agents-generative-media/'}
+        proof.check_answer(good)
+        with self.assertRaisesRegex(RuntimeError, 'lacks factual CMP'):
+            proof.check_answer({'text': 'Homework info: https://courses.datatalks.club/ml-zoomcamp-2026/'})
+
+    @patch.object(proof.boto3, 'client')
+    def test_cmp_failure_log_for_course_fails_proof(self, client):
+        course = 'production-ai-agents-generative-media'
+        client.return_value.filter_log_events.return_value = {'events': [
+            {'message': f'CMP_CONTEXT_FAILED: course={course} reason=unmapped_course; FAQ fallback used.'}]}
+        with self.assertRaisesRegex(RuntimeError, 'CMP context failed'):
+            proof.assert_no_cmp_failure(0, course)
+        client.return_value.filter_log_events.return_value = {'events': [
+            {'message': 'CMP_CONTEXT_FAILED: course=llm-zoomcamp reason=X; FAQ fallback used.'}]}
+        proof.assert_no_cmp_failure(0, course)

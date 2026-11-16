@@ -19,6 +19,17 @@ PUBLIC_FIELDS = {
                  'assignments_created', 'source_url'),
 }
 BOOLEAN_FIELDS = {'finished', 'peer_review_open', 'assignments_created'}
+# One Slack DM per (course, reason) per warm container and hour. Every failure is
+# still logged; this only stops the same alert flooding admins' DMs when Slack
+# or Lambda delivers one event twice or a course keeps failing.
+ALERT_COOLDOWN_SECONDS = 3600
+_recent_alerts = {}
+
+
+class CMPCourseNotFound(ValueError):
+    pass
+
+
 DATE_FIELDS = {'starts_at', 'start_date', 'end_date', 'due_date',
                'submission_due_date', 'peer_review_due_date', 'peer_review_opens_at'}
 
@@ -70,6 +81,8 @@ def fetch_state(cohort, user=None):
         params=params, headers={'Authorization': f'Bearer {token}'},
         timeout=(2, 5), allow_redirects=False, stream=True,
     ) as response:
+        if response.status_code == 404:
+            raise CMPCourseNotFound('CMP HTTP 404')
         if response.status_code != 200:
             raise ValueError(f'CMP HTTP {response.status_code}')
         body = bytearray()
@@ -119,6 +132,12 @@ def alert(slack, admins, course, reason):
     # Never log exception text, response bodies, credentials, or student data.
     message = f'CMP_CONTEXT_FAILED: course={course} reason={reason}; FAQ fallback used.'
     logger.error(message)
+    now = time.monotonic()
+    last = _recent_alerts.get((course, reason))
+    if last is not None and now - last < ALERT_COOLDOWN_SECONDS:
+        logger.info('CMP_ALERT_SUPPRESSED: duplicate within cooldown')
+        return
+    _recent_alerts[(course, reason)] = now
     for admin in admins:
         try:
             slack.post_private_message(admin, message)
@@ -131,12 +150,18 @@ def enrich(payload, config, slack, student_user=None):
         return payload, None
     course = payload['course']
     cohort = (config.get('cmp') or {}).get('courses', {}).get(course)
-    if not cohort:
-        alert(slack, config.get('admins', []), course, 'unmapped_course')
-        return payload, None
+    # Courses without yearly cohorts use the same slug in the FAQ and in CMP,
+    # so a new course works without a config change. fetch_state still checks
+    # that CMP returns exactly this slug; a 404 means the course is not in CMP.
+    derived = not cohort
+    cohort = cohort or course
     try:
         public, private = fetch_state(cohort, student_user)
         return {**payload, 'course_state': public}, private
+    except CMPCourseNotFound:
+        reason = 'unmapped_course' if derived else 'CMPCourseNotFound'
+        alert(slack, config.get('admins', []), course, reason)
+        return payload, None
     except Exception as exc:
         alert(slack, config.get('admins', []), course, type(exc).__name__)
         return payload, None

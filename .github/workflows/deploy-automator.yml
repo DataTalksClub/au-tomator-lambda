@@ -8,9 +8,14 @@ on:
   workflow_dispatch:
     inputs:
       live_proof:
-        description: 'Post a labelled CMP integration test question in the ML course channel, verify the bot reply, then delete both'
+        description: 'Post a labelled CMP integration test question in a course channel, verify the bot reply and that CMP context did not fail, then delete both'
         type: boolean
         default: false
+      proof_course:
+        description: 'Course channel for the live proof question'
+        type: choice
+        options: [ml, genmedia]
+        default: ml
       proof_keep_seconds:
         description: 'Seconds to keep the verified question and reply visible before cleanup'
         type: string
@@ -95,4 +100,5 @@ jobs:
       if: github.event_name == 'workflow_dispatch' && inputs.live_proof
       env:
         PROOF_KEEP_SECONDS: ${{ inputs.proof_keep_seconds }}
+        PROOF_COURSE: ${{ inputs.proof_course }}
       run: uv run python scripts/prove_cmp_slack.py

@@ -47,6 +47,12 @@ Deployment sets the Lambda timeout to 120 seconds to leave room for the existing
 Missing mappings/configuration, HTTP/validation
 failures and private-delivery failures emit `CMP_CONTEXT_FAILED` and notify
 configured admins in Slack; failed alerts emit `CMP_ALERT_DELIVERY_FAILED`.
+Each failure is logged, but a warm container DMs admins at most once per
+course and reason per hour, and ignores a Slack `event_id` it has already
+handled (the router also drops Slack `http_timeout` retries).
+A course missing from `cmp.courses` is looked up in CMP under its FAQ slug,
+so courses without yearly cohorts work without a config change; only a CMP
+404 for that slug reports `reason=unmapped_course`.
 CMP failures continue with the existing FAQ request. Alert and private-count
 delivery also use bounded timeouts. No credentials, response bodies or private
 counts are logged by this integration.

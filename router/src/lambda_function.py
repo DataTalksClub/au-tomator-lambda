@@ -82,6 +82,19 @@ def run(body):
     }
 
 
+def is_timeout_retry(original_event):
+    # Slack re-sends an event when the router took >3s (e.g. a cold start).
+    # By then the first delivery has already been forwarded asynchronously, so
+    # forwarding the retry would answer and alert twice for the same message.
+    # Retries for other reasons (router errors) are still forwarded.
+    headers = {k.lower(): v for k, v in (original_event.get('headers') or {}).items()}
+    return (headers.get('x-slack-retry-num') is not None
+            and headers.get('x-slack-retry-reason') == 'http_timeout')
+
+
 def lambda_handler(original_event, context):
+    if is_timeout_retry(original_event):
+        print('Ignoring Slack http_timeout retry')
+        return {'statusCode': 200, 'body': 'duplicate'}
     body = extract_body(original_event)
     return run(body)

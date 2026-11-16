@@ -86,6 +86,17 @@ class TestRouterLambda(unittest.TestCase):
             body,
         )
 
+    def test_slack_timeout_retry_is_not_forwarded_twice(self):
+        body = {'event': {'type': 'app_mention', 'user': 'U1', 'text': '<@UFAQBOT> hi'}}
+        event = {'body': json.dumps(body), 'headers': {
+            'X-Slack-Retry-Num': '1', 'X-Slack-Retry-Reason': 'http_timeout'}}
+        response = lambda_function.lambda_handler(event, None)
+        self.assertEqual(response['statusCode'], 200)
+        self.assertEqual(fake_lambda_client.invocations, [])
+        event['headers'] = {'x-slack-retry-num': '1', 'x-slack-retry-reason': 'http_error'}
+        lambda_function.lambda_handler(event, None)
+        self.assertEqual(len(fake_lambda_client.invocations), 1)
+
     def test_app_mention_in_thread_routes_to_automator(self):
         body = {
             'event': {
