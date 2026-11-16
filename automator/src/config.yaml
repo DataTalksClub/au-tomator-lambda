@@ -11,6 +11,7 @@ channels:
   C06TEGTGM3J: "course-llm-zoomcamp"
   C09HWT76L95: "course-ai-dev-tools-zoomcamp"
   C06L1RTF10F: "course-stock-markets-analytics-zoomcamp"
+  C0CEG1BUDKL: "course-ai-mediagen"
 
 faq_assistant:
   courses:
@@ -20,6 +21,7 @@ faq_assistant:
     course-ml-zoomcamp: machine-learning-zoomcamp
     course-ai-dev-tools-zoomcamp: ai-dev-tools-zoomcamp
     course-stock-markets-analytics-zoomcamp: stock-markets-analytics-zoomcamp
+    course-ai-mediagen: production-ai-agents-generative-media
 
 # Exact cohorts are deliberate: never infer a cohort from the current year.
 cmp:
@@ -47,6 +49,7 @@ reactions:
         course-llm-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
         course-ai-dev-tools-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
         course-stock-markets-analytics-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        course-ai-mediagen: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
         default: https://datatalks.club/docs/general/guidelines/asking-for-help/
       context:
         course-ml-zoomcamp: the module, lesson, homework, or project step
@@ -55,6 +58,7 @@ reactions:
         course-llm-zoomcamp: the module, lesson, homework, or project step
         course-ai-dev-tools-zoomcamp: the module, lesson, homework, or project step
         course-stock-markets-analytics-zoomcamp: the module, lesson, homework, or project step
+        course-ai-mediagen: the module, lesson, homework, or project step
         default: the relevant context and environment
     message: |
       Please be more specific: include what you're trying to do, {context}, the exact command you ran, the full error message as text, and what you've already tried.
@@ -99,6 +103,7 @@ reactions:
         course-llm-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
         course-ai-dev-tools-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
         course-stock-markets-analytics-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        course-ai-mediagen: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
         default: https://datatalks.club/docs/general/guidelines/asking-for-help/
     message: |
       Removing the message from the channel to save space. Please move the error log to the thread.
@@ -121,6 +126,7 @@ reactions:
         course-llm-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
         course-ai-dev-tools-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
         course-stock-markets-analytics-zoomcamp: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
+        course-ai-mediagen: https://datatalks.club/docs/courses/zoomcamp-logistics/asking-questions/
         default: https://datatalks.club/docs/general/guidelines/asking-for-help/
     message: |
       Please don't post screenshots or pictures of your code, they are very difficult to read.

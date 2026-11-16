@@ -504,6 +504,12 @@ class TestChannelConfig(unittest.TestCase):
         channel_name = lambda_function.get_channel_name('C09HWT76L95')
         self.assertEqual(channel_name, 'course-ai-dev-tools-zoomcamp')
     
+    def test_ai_mediagen_channel_maps_to_faq_course(self):
+        self.assertEqual(
+            lambda_function.course_for_channel('C0CEG1BUDKL'),
+            'production-ai-agents-generative-media',
+        )
+
     def test_all_expected_channels(self):
         """Verify all expected channels are configured"""
         expected_channels = {
@@ -513,7 +519,9 @@ class TestChannelConfig(unittest.TestCase):
             'C06TEGTGM3J': 'course-llm-zoomcamp',
             'C09HWT76L95': 'course-ai-dev-tools-zoomcamp',
             'C06L1RTF10F': 'course-stock-markets-analytics-zoomcamp',
+            'C0CEG1BUDKL': 'course-ai-mediagen',
         }
+
         
         for channel_id, expected_name in expected_channels.items():
             channel_name = lambda_function.get_channel_name(channel_id)
