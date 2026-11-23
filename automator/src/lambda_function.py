@@ -24,6 +24,7 @@ FAQ_ASSISTANT_ERROR_MESSAGE = (
     'The FAQ assistant is currently not available. '
     'In the meantime, you can try to find the answer here:'
 )
+FAQ_ASSISTANT_UNAVAILABLE_MARKER = 'FAQ_ASSISTANT_UNAVAILABLE'
 FAQ_ASSISTANT_GENERIC_RESOURCES = {
     'docs': 'https://datatalks.club/docs/',
     'faq': 'https://datatalks.club/faq/',
@@ -167,9 +168,13 @@ def post_faq_assistant_answer(channel, thread_ts, payload, student_user=None):
         response = getattr(exc, 'response', None)
         status = getattr(response, 'status_code', None)
         body = getattr(response, 'text', '') if response is not None else ''
-        logger.info(
-            f"FAQ assistant request failed: status={status} "
-            f"error={exc} body={body[:500]}"
+        # FAQ_ASSISTANT_UNAVAILABLE is matched by a CloudWatch metric filter
+        # (aws-infra main/automator) that alarms to operator-alerts; keep the
+        # token stable.
+        logger.error(
+            f"{FAQ_ASSISTANT_UNAVAILABLE_MARKER} FAQ assistant request failed: "
+            f"status={status} course={payload.get('course', '')} "
+            f"channel={channel} error={exc} body={body[:500]}"
         )
         slack.post_message_to_thread(
             channel, thread_ts, format_faq_assistant_error_message(payload)

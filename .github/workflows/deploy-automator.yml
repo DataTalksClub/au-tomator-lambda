@@ -16,6 +16,10 @@ on:
         type: choice
         options: [ml, genmedia]
         default: ml
+      faq_probe:
+        description: 'Ask the live FAQ assistant one question with the Lambda URL/secret (no Slack posts) and require a 200 answer'
+        type: boolean
+        default: false
       proof_keep_seconds:
         description: 'Seconds to keep the verified question and reply visible before cleanup'
         type: string
@@ -97,6 +101,17 @@ jobs:
           --query 'Configuration.LastModified' \
           --output text
         echo "Automator Lambda function updated successfully"
+
+    - name: Probe the live FAQ assistant
+      if: github.event_name == 'workflow_dispatch' && inputs.faq_probe
+      run: |
+        umask 077
+        lambda_env=$(mktemp)
+        trap 'rm -f "$lambda_env"' EXIT
+        aws lambda get-function-configuration \
+          --function-name "$FUNCTION_NAME" --region "$AWS_REGION" \
+          --query 'Environment.Variables' --output json > "$lambda_env"
+        uv run python scripts/probe_faq_assistant.py < "$lambda_env"
 
     - name: Verify real Slack question and answer
       if: github.event_name == 'workflow_dispatch' && inputs.live_proof
