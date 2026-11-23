@@ -1217,9 +1217,10 @@ class TestFaqAssistant(unittest.TestCase):
         self.assertIn('*Sources:*', posted)
         self.assertIn('<https://datatalks.club/faq/llm-zoomcamp.html#abc|Joining>', posted)
 
+    @patch('automator_lambda_function.logger')
     @patch('automator_lambda_function.slack')
     @patch('automator_lambda_function.call_faq_assistant')
-    def test_faq_assistant_failure_posts_error_without_raising(self, mock_call, mock_slack):
+    def test_faq_assistant_failure_posts_error_without_raising(self, mock_call, mock_slack, mock_logger):
         response = MagicMock()
         response.status_code = 500
         response.text = 'upstream exploded'
@@ -1238,6 +1239,13 @@ class TestFaqAssistant(unittest.TestCase):
         )
 
         mock_slack.github_to_slack_markdown.assert_not_called()
+        alert_lines = [
+            call.args[0] for call in mock_logger.error.call_args_list
+            if call.args[0].startswith('FAQ_ASSISTANT_UNAVAILABLE ')
+        ]
+        self.assertEqual(len(alert_lines), 1)
+        self.assertIn('status=500', alert_lines[0])
+        self.assertIn('course=llm-zoomcamp', alert_lines[0])
         posted = mock_slack.post_message_to_thread.call_args[0][2]
         self.assertIn('The FAQ assistant is currently not available.', posted)
         self.assertIn('In the meantime, you can try to find the answer here:', posted)

@@ -84,3 +84,20 @@ On Windows with Git Bash, paths like `/aws/lambda/...` get converted to Windows 
 1. Go to CloudWatch Logs in AWS Console
 2. Navigate to `/aws/lambda/automator-process-reaction`
 3. View logs in real-time or search
+
+## FAQ assistant unavailable alert
+
+When the FAQ assistant call fails, the bot still replies in the thread with the
+"The FAQ assistant is currently not available" fallback, and logs one line
+starting with `FAQ_ASSISTANT_UNAVAILABLE` (status, course, channel, error, body).
+
+The CloudWatch metric filter `automator-faq-assistant-unavailable` (Terraform:
+`aws-infra/main/automator/alerts.tf`) counts those lines into
+`Automator/FaqAssistantUnavailable`. The alarm with the same name fires on any
+occurrence in 5 minutes and notifies the `operator-alerts` SNS topic, which
+emails dev@dtcdev.click (the oncall mailbox). Keep the marker token stable.
+
+```bash
+aws logs filter-log-events --log-group-name /aws/lambda/automator-process-reaction \
+  --filter-pattern FAQ_ASSISTANT_UNAVAILABLE --start-time <ms>
+```
