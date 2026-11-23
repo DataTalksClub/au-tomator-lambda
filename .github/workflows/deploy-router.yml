@@ -14,12 +14,14 @@ env:
 
 jobs:
   deploy-router:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, contabo]
     permissions:
       id-token: write   # request the OIDC token for AWS role assumption
       contents: read
     # Deploy only when Test Router passed on main, or when manually run from main.
-    if: (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    # A fork PR from a branch named main also reports head_branch == 'main';
+    # only deploy test runs of this repository's own code.
+    if: (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     defaults:
       run:
         working-directory: router
