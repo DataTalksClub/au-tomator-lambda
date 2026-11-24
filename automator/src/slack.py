@@ -91,56 +91,78 @@ def find_message_by_ts(messages, ts):
     return None
 
 
-def get_message_content(channel, ts):
-    params = {
-        'channel': channel,
-        'ts': ts
-    }
+_CONVERSATIONS_FALLBACK_ERRORS = {
+    'not_in_channel',
+    'channel_not_found',
+    'missing_scope',
+    'not_allowed_token_type',
+}
 
-    headers = {
-        'Authorization': f'Bearer {SLACK_TOKEN}'
-    }
 
-    url = 'https://slack.com/api/conversations.replies'
-    response = requests.get(url, params=params, headers=headers)
-    response.raise_for_status()
+def _candidate_tokens():
+    tokens = [SLACK_TOKEN]
+    if USER_SLACK_TOKEN and USER_SLACK_TOKEN != SLACK_TOKEN:
+        tokens.append(USER_SLACK_TOKEN)
+    return tokens
 
-    response_json = response.json()
-    all_messages = response_json.get('messages', [])
-    if not all_messages:
-        return None
-    message = find_message_by_ts(all_messages, ts)
-    return message
+
+def _conversations_get(method, params):
+    url = f'https://slack.com/api/{method}'
+    tokens = _candidate_tokens()
+    last_json = {}
+    for idx, token in enumerate(tokens):
+        headers = {'Authorization': f'Bearer {token}'}
+        response = requests.get(url, params=params, headers=headers)
+        response.raise_for_status()
+        response_json = response.json()
+        last_json = response_json
+        if response_json.get('ok', True):
+            return response_json
+        error = response_json.get('error')
+        if error not in _CONVERSATIONS_FALLBACK_ERRORS or idx == len(tokens) - 1:
+            logger.info(f"{method} failed for {params}: {error}")
+            return response_json
+    return last_json
+
+
+def get_message_content(channel, ts, thread_ts=None):
+    if thread_ts and thread_ts != ts:
+        thread_json = _conversations_get(
+            'conversations.replies', {'channel': channel, 'ts': thread_ts}
+        )
+        message = find_message_by_ts(thread_json.get('messages', []), ts)
+        if message:
+            return message
+
+    response_json = _conversations_get(
+        'conversations.replies', {'channel': channel, 'ts': ts}
+    )
+    message = find_message_by_ts(response_json.get('messages', []), ts)
+    if message:
+        return message
+
+    # Fallback for top-level messages when conversations.replies fails or misses.
+    history_json = _conversations_get(
+        'conversations.history',
+        {'channel': channel, 'latest': ts, 'inclusive': True, 'limit': 1},
+    )
+    return find_message_by_ts(history_json.get('messages', []), ts)
 
 
 def get_thread_replies(channel, ts, include_parent=False):
     """Get all replies in a thread (optionally including the parent message)"""
-    params = {
-        'channel': channel,
-        'ts': ts
-    }
-
-    headers = {
-        'Authorization': f'Bearer {SLACK_TOKEN}'
-    }
-
-    url = 'https://slack.com/api/conversations.replies'
-    response = requests.get(url, params=params, headers=headers)
-    response.raise_for_status()
-
-    response_json = response.json()
+    response_json = _conversations_get(
+        'conversations.replies', {'channel': channel, 'ts': ts}
+    )
     if not response_json.get('ok', True):
-        logger.info(f"conversations.replies failed for {channel} {ts}: {response_json.get('error')}")
         return []
 
     all_messages = response_json.get('messages', [])
     if include_parent:
         return all_messages
-    
+
     # Filter out the parent message (first message with ts == thread_ts)
-    thread_replies = [msg for msg in all_messages if msg['ts'] != ts]
-    
-    return thread_replies
+    return [msg for msg in all_messages if msg['ts'] != ts]
 
 
 def get_thread_messages(channel, ts):
@@ -188,11 +210,14 @@ def send_dm_blocks(user, message, blocks):
     return response.json()
 
 
-def remove_message(channel, ts):
+def remove_message(channel, ts, thread_ts=None):
     # Keep the guard at the sole chat.delete boundary so every deletion path,
     # including ban sweeps and thread replies, must first preserve the message.
     try:
-        message = get_message_content(channel, ts)
+        if thread_ts and thread_ts != ts:
+            message = get_message_content(channel, ts, thread_ts=thread_ts)
+        else:
+            message = get_message_content(channel, ts)
     except Exception:
         alert_deletion_audit('AUDIT_DELETED_MESSAGE_FAILED', channel, ts)
         raise RuntimeError('Deletion skipped: full message fetch failed') from None
@@ -259,15 +284,8 @@ def get_user_info(user_id):
     return response_json.get('user')
 
 
-def search_user_messages(username, after_date):
-    """Find messages from a given Slack username posted on or after `after_date` (YYYY-MM-DD).
-
-    Uses search.messages, which requires a user token with search:read.
-    Returns a list of message dicts with at least channel/ts/text/permalink.
-    """
+def _run_search_messages(query):
     url = 'https://slack.com/api/search.messages'
-    query = f'from:@{username} after:{after_date}'
-
     headers = {'Authorization': f'Bearer {USER_SLACK_TOKEN}'}
 
     matches = []
@@ -291,6 +309,23 @@ def search_user_messages(username, after_date):
         page += 1
 
     return matches
+
+
+def search_user_messages(username, after_date, user_id=None):
+    """Find messages from a given Slack user posted on or after `after_date` (YYYY-MM-DD).
+
+    Uses search.messages, which requires a user token with search:read.
+    Returns a list of message dicts with at least channel/ts/text/permalink.
+    """
+    if user_id:
+        matches = _run_search_messages(f'from:<@{user_id}> after:{after_date}')
+        if matches or not username:
+            return matches
+
+    if not username:
+        return []
+
+    return _run_search_messages(f'from:@{username} after:{after_date}')
 
 
 def get_user_and_message(event):

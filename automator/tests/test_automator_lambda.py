@@ -984,6 +984,95 @@ class TestBanUser(unittest.TestCase):
             lambda_function.handle_ban_user,
         )
 
+    @patch('automator_lambda_function.slack')
+    def test_ban_user_falls_back_to_item_user_for_thread_reply(self, mock_slack):
+        """If reacted message lookup returns None (e.g. thread reply), use item_user."""
+        mock_slack.get_message_content.return_value = None
+        mock_slack.get_user_info.return_value = {'name': 'spammer', 'profile': {}}
+        mock_slack.search_user_messages.return_value = [
+            {
+                'channel': {'id': 'C_AAA'},
+                'ts': '1234567890.000200',
+                'thread_ts': '1234567890.000100',
+                'text': 'spam reply',
+            },
+        ]
+
+        event = {
+            'user': 'UMOD',
+            'item_user': 'U_SPAMMER',
+            'item': {'channel': 'C_AAA', 'ts': '1234567890.000200'},
+            'reaction': 'ban-user',
+        }
+
+        with patch('automator_lambda_function.time.time', return_value=1234567890.0 + 1000), \
+             patch('automator_lambda_function.FAKE_DELETE', False):
+            lambda_function.handle_ban_user(event, self._base_reaction_config())
+
+        mock_slack.search_user_messages.assert_called_once()
+        mock_slack.remove_message.assert_called_once_with(
+            'C_AAA', '1234567890.000200', thread_ts='1234567890.000100'
+        )
+        mock_slack.send_dm_blocks.assert_called_once()
+        self.assertIn('Deleted: 1 parents, 0 replies', mock_slack.send_dm_blocks.call_args.args[1])
+
+    @patch('automator_lambda_function.slack')
+    def test_ban_user_searches_even_without_username(self, mock_slack):
+        """Missing username in users.info should still search by user_id."""
+        mock_slack.get_message_content.return_value = {
+            'user': 'U_SPAMMER',
+            'text': 'spam',
+        }
+        mock_slack.get_user_info.return_value = {}
+        mock_slack.search_user_messages.return_value = []
+
+        event = {
+            'user': 'UMOD',
+            'item': {'channel': 'C_AAA', 'ts': '1234567890.000100'},
+            'reaction': 'ban-user',
+        }
+
+        with patch('automator_lambda_function.FAKE_DELETE', False):
+            lambda_function.handle_ban_user(event, self._base_reaction_config())
+
+        mock_slack.search_user_messages.assert_called_once()
+        self.assertEqual(
+            mock_slack.search_user_messages.call_args.kwargs.get('user_id'),
+            'U_SPAMMER',
+        )
+        mock_slack.remove_message.assert_called_once_with('C_AAA', '1234567890.000100')
+
+    @patch('automator_lambda_function.slack')
+    def test_ban_user_continues_when_one_delete_raises(self, mock_slack):
+        """One failed delete must not abort deleting other spammer messages."""
+        mock_slack.get_message_content.return_value = {
+            'user': 'U_SPAMMER',
+            'text': 'spam 1',
+        }
+        mock_slack.get_user_info.return_value = {'name': 'spammer', 'profile': {}}
+        mock_slack.search_user_messages.return_value = [
+            {'channel': {'id': 'C_BBB'}, 'ts': '1234567890.000200', 'text': 'spam 2'},
+        ]
+        mock_slack.get_thread_replies.return_value = []
+        mock_slack.remove_message.side_effect = [
+            RuntimeError('audit failed for first'),
+            {'ok': True},
+        ]
+
+        event = {
+            'user': 'UMOD',
+            'item': {'channel': 'C_AAA', 'ts': '1234567890.000100'},
+            'reaction': 'ban-user',
+        }
+
+        with patch('automator_lambda_function.time.time', return_value=1234567890.0 + 1000), \
+             patch('automator_lambda_function.FAKE_DELETE', False):
+            lambda_function.handle_ban_user(event, self._base_reaction_config())
+
+        self.assertEqual(mock_slack.remove_message.call_count, 2)
+        mock_slack.send_dm_blocks.assert_called_once()
+        self.assertIn('Deleted: 1 parents, 0 replies', mock_slack.send_dm_blocks.call_args.args[1])
+
 
 class TestFaqAssistant(unittest.TestCase):
     """Test Cloudflare FAQ assistant integration."""
@@ -1652,6 +1741,59 @@ class TestSlackThreadReplies(unittest.TestCase):
 
         res = get_thread_replies('C_BAD', '100.0', include_parent=True)
         self.assertEqual(res, [])
+
+    @patch('slack.requests.get')
+    def test_get_message_content_falls_back_to_user_token(self, mock_get):
+        import slack
+
+        mock_get.side_effect = [
+            MagicMock(json=lambda: {'ok': False, 'error': 'not_in_channel'}),
+            MagicMock(json=lambda: {'ok': True, 'messages': [{'ts': '100.0', 'user': 'U_SPAMMER'}]}),
+        ]
+
+        with patch.object(slack, 'SLACK_TOKEN', 'bot-tok'), \
+             patch.object(slack, 'USER_SLACK_TOKEN', 'user-tok'):
+            msg = slack.get_message_content('C_PRIVATE', '100.0')
+
+        self.assertEqual(msg, {'ts': '100.0', 'user': 'U_SPAMMER'})
+        self.assertEqual(mock_get.call_count, 2)
+        self.assertEqual(
+            mock_get.call_args_list[1].kwargs['headers'],
+            {'Authorization': 'Bearer user-tok'},
+        )
+
+    @patch('slack.requests.get')
+    def test_get_message_content_falls_back_to_history_on_thread_not_found(self, mock_get):
+        import slack
+
+        mock_get.side_effect = [
+            MagicMock(json=lambda: {'ok': False, 'error': 'thread_not_found'}),
+            MagicMock(json=lambda: {'ok': True, 'messages': [{'ts': '100.0', 'user': 'U_SPAMMER'}]}),
+        ]
+
+        with patch.object(slack, 'SLACK_TOKEN', 'bot-tok'), \
+             patch.object(slack, 'USER_SLACK_TOKEN', None):
+            msg = slack.get_message_content('C_PUB', '100.0')
+
+        self.assertEqual(msg, {'ts': '100.0', 'user': 'U_SPAMMER'})
+        self.assertEqual(mock_get.call_args_list[1].args[0], 'https://slack.com/api/conversations.history')
+
+    @patch('slack.requests.get')
+    def test_search_user_messages_uses_user_id_when_given(self, mock_get):
+        import slack
+
+        mock_get.return_value = MagicMock(
+            json=lambda: {'ok': True, 'messages': {'matches': [{'ts': '100.0'}], 'paging': {'pages': 1}}}
+        )
+
+        with patch.object(slack, 'USER_SLACK_TOKEN', 'user-tok'):
+            matches = slack.search_user_messages('spammer', '2026-11-22', user_id='U_SPAMMER')
+
+        self.assertEqual(matches, [{'ts': '100.0'}])
+        self.assertEqual(
+            mock_get.call_args.kwargs['params']['query'],
+            'from:<@U_SPAMMER> after:2026-11-22',
+        )
 
 
 if __name__ == '__main__':

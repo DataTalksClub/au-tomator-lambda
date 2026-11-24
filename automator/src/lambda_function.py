@@ -573,12 +573,20 @@ def handle_repost_to_thread_and_delete(event, reaction_config):
     logger.info(f"Deleted original message from channel {channel} (kept in thread)")
 
 
-def _delete_message(channel, ts):
+def _delete_message(channel, ts, thread_ts=None):
     if FAKE_DELETE:
         logger.info(f"FAKE_DELETE for {channel} {ts}")
         return True
 
-    response = slack.remove_message(channel, ts)
+    try:
+        if thread_ts and thread_ts != ts:
+            response = slack.remove_message(channel, ts, thread_ts=thread_ts)
+        else:
+            response = slack.remove_message(channel, ts)
+    except Exception as exc:
+        logger.warning(f"delete raised for {channel} {ts}: {exc}")
+        return False
+
     if isinstance(response, dict) and not response.get('ok', False):
         logger.info(
             f"delete failed for {channel} {ts}: {response.get('error')}"
@@ -682,13 +690,11 @@ def handle_ban_user(event, reaction_config):
     moderator = event.get('user')
 
     message_details = slack.get_message_content(channel, ts)
-    if not message_details:
-        logger.info(f"Ban: reacted message not found for {channel} {ts}")
-        return
-
-    target_user_id = message_details.get('user')
+    target_user_id = (
+        message_details.get('user') if message_details else event.get('item_user')
+    )
     if not target_user_id:
-        logger.info("Ban: reacted message has no user; aborting")
+        logger.info(f"Ban: reacted message user not found for {channel} {ts}; aborting")
         return
 
     if target_user_id in set(config.get('admins', [])):
@@ -706,26 +712,34 @@ def handle_ban_user(event, reaction_config):
     cutoff_ts = time.time() - lookback_hours * 3600
 
     search_matches = []
-    if username:
-        search_matches = slack.search_user_messages(username, after_date)
-        search_matches = [
-            m for m in search_matches
-            if float(m.get('ts', 0)) >= cutoff_ts
-        ]
-        logger.info(
-            f"Ban: found {len(search_matches)} messages for @{username} "
-            f"since {after_date}"
-        )
+    if username or target_user_id:
+        try:
+            search_matches = slack.search_user_messages(
+                username, after_date, user_id=target_user_id
+            )
+            search_matches = [
+                m for m in search_matches
+                if float(m.get('ts', 0)) >= cutoff_ts
+            ]
+            logger.info(
+                f"Ban: found {len(search_matches)} messages for {target_user_id} "
+                f"(@{username}) since {after_date}"
+            )
+        except Exception as exc:
+            logger.warning(f"Ban: search_user_messages failed for {target_user_id}: {exc}")
     else:
-        logger.info(f"Ban: could not resolve username for {target_user_id}; deleting reacted message only")
+        logger.info(f"Ban: could not resolve user for {target_user_id}; deleting reacted message only")
 
-    matches = [_seed_ban_message(channel, ts, message_details)]
-    seen = {_message_key(matches[0])}
+    seed_msg = _seed_ban_message(channel, ts, message_details or {})
+    matches = [seed_msg]
+    seen = {_message_key(seed_msg): seed_msg}
     for match in search_matches:
         key = _message_key(match)
         if key not in seen:
             matches.append(match)
-            seen.add(key)
+            seen[key] = match
+        elif not seen[key].get('thread_ts') and match.get('thread_ts'):
+            seen[key]['thread_ts'] = match['thread_ts']
 
     reply_template = reaction_config.get('reply_message')
     deleted = set()
@@ -756,14 +770,14 @@ def handle_ban_user(event, reaction_config):
                     )
                     slack.send_dm(reply_user, notification)
 
-                if _delete_message(msg_channel, reply_ts):
+                if _delete_message(msg_channel, reply_ts, thread_ts=msg_ts):
                     deleted.add(key)
                     replies_deleted += 1
 
         key = (msg_channel, msg_ts)
         if key in deleted:
             continue
-        if _delete_message(msg_channel, msg_ts):
+        if _delete_message(msg_channel, msg_ts, thread_ts=thread_ts):
             deleted.add(key)
             parent_deleted += 1
 
