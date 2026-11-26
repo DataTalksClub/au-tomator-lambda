@@ -4,15 +4,15 @@ version = "0.1.0"
 description = "Slack reaction + FAQ-mention handler Lambda for DataTalks.Club."
 requires-python = ">=3.12"
 dependencies = [
-    "pyyaml==6.0.3",
+    "pyyaml==6.0.4",
     "requests==2.34.2",
 ]
 
 # boto3 is supplied by the Lambda runtime, so it lives in dev only (for tests).
 [dependency-groups]
 dev = [
-    "pytest>=9.1.1",
-    "boto3>=1.43.34",
+    "pytest>=9.2.0",
+    "boto3>=1.44.9",
 ]
 
 [tool.uv]
