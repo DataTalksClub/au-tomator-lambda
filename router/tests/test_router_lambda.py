@@ -164,21 +164,23 @@ if __name__ == '__main__':
     unittest.main()
 
 
-def test_ban_timeout_retry_is_forwarded_when_first_delivery_may_have_failed():
-    fake_lambda_client.invocations.clear()
-    body = {'event_id': 'E_BAN', 'event': {'type': 'reaction_added',
-        'user': 'U01AXE0P5M3', 'reaction': 'ban-user', 'item_user': 'US',
-        'item': {'type': 'message', 'channel': 'C', 'ts': '100'}}}
-    event = {'body': json.dumps(body), 'headers': {
-        'x-slack-retry-num': '1', 'x-slack-retry-reason': 'http_timeout'}}
-    assert lambda_function.lambda_handler(event, None)['statusCode'] == 200
-    assert fake_lambda_client.invocations == [{'FunctionName': 'automator-process-reaction',
-        'InvocationType': 'Event', 'Payload': json.dumps(body)}]
+class TestBanRetryRouting(unittest.TestCase):
+    def test_ban_timeout_retry_is_forwarded_when_first_delivery_may_have_failed(self):
+        fake_lambda_client.invocations.clear()
+        body = {'event_id': 'E_BAN', 'event': {'type': 'reaction_added',
+            'user': 'U01AXE0P5M3', 'reaction': 'ban-user', 'item_user': 'US',
+            'item': {'type': 'message', 'channel': 'C', 'ts': '100'}}}
+        event = {'body': json.dumps(body), 'headers': {
+            'x-slack-retry-num': '1', 'x-slack-retry-reason': 'http_timeout'}}
+        assert lambda_function.lambda_handler(event, None)['statusCode'] == 200
+        assert fake_lambda_client.invocations == [{'FunctionName': 'automator-process-reaction',
+            'InvocationType': 'Event', 'Payload': json.dumps(body)}]
 
 
-def test_rejected_async_invocation_is_not_acknowledged_as_success():
-    from unittest.mock import patch
-    with patch.object(fake_lambda_client, 'invoke', return_value={'StatusCode': 500}):
-        with unittest.TestCase().assertRaisesRegex(RuntimeError, 'not accepted'):
-            lambda_function.run({'event': {'type': 'reaction_added',
-                'user': 'U01AXE0P5M3', 'reaction': 'ban-user'}})
+    def test_rejected_async_invocation_is_not_acknowledged_as_success(self):
+        from unittest.mock import patch
+        with patch.object(fake_lambda_client, 'invoke', return_value={'StatusCode': 500}):
+            with unittest.TestCase().assertRaisesRegex(RuntimeError, 'not accepted'):
+                lambda_function.run({'event': {'type': 'reaction_added',
+                    'user': 'U01AXE0P5M3', 'reaction': 'ban-user'}})
+
