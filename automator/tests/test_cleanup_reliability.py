@@ -138,4 +138,3 @@ class TestCleanupReliability(unittest.TestCase):
         with patch.object(slack, '_conversations_get', return_value={'ok': False, 'error': 'missing_scope'}):
             with pytest.raises(RuntimeError, match='missing_scope'):
                 slack.is_message_absent('C', '100')
-
