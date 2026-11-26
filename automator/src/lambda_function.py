@@ -464,11 +464,13 @@ def handle_delete_message(event, reaction_config):
                 if thread_dm:
                     slack.send_dm(reply_user, thread_dm)
                 
-                # Delete the thread reply
-                if FAKE_DELETE:
-                    logger.info(f"FAKE_DELETE thread reply for {channel} {reply_ts}")
-                else:
-                    slack.remove_message(channel, reply_ts)
+            # Delete every reply, including bot replies, with its audit context.
+            if FAKE_DELETE:
+                logger.info(f"FAKE_DELETE thread reply for {channel} {reply_ts}")
+            else:
+                result = slack.remove_message(channel, reply_ts, thread_ts=ts)
+                if isinstance(result, dict) and not result.get('ok'):
+                    raise RuntimeError('Thread reply deletion failed; parent retained')
     
     # Now handle the parent message
     message_pattern = reaction_config['message']
@@ -585,6 +587,12 @@ def _delete_message(channel, ts, thread_ts=None):
             response = slack.remove_message(channel, ts)
     except Exception as exc:
         logger.warning(f"delete raised for {channel} {ts}: {exc}")
+        try:
+            if slack.is_message_absent(channel, ts, thread_ts=thread_ts) is True:
+                logger.info(f'Already absent: {channel} {ts}')
+                return True
+        except Exception:
+            pass
         return False
 
     if isinstance(response, dict) and not response.get('ok', False):
@@ -689,19 +697,24 @@ def handle_ban_user(event, reaction_config):
     ts = item['ts']
     moderator = event.get('user')
 
-    message_details = slack.get_message_content(channel, ts)
-    target_user_id = (
-        message_details.get('user') if message_details else event.get('item_user')
-    )
+    try:
+        message_details = slack.get_message_content(channel, ts)
+    except Exception as exc:
+        logger.warning(f'Ban: reacted message lookup failed: {exc}')
+        message_details = None
+    target_user_id = (message_details or {}).get('user') or event.get('item_user')
     if not target_user_id:
-        logger.info(f"Ban: reacted message user not found for {channel} {ts}; aborting")
-        return
+        raise RuntimeError(f'Ban: reacted message user unavailable for {channel} {ts}')
 
     if target_user_id in set(config.get('admins', [])):
         logger.info(f"Ban: refusing to act on admin {target_user_id}")
         return
 
-    user_info = slack.get_user_info(target_user_id) or {}
+    try:
+        user_info = slack.get_user_info(target_user_id) or {}
+    except Exception as exc:
+        logger.warning(f'Ban: optional user profile unavailable: {exc}')
+        user_info = {}
     username = user_info.get('name') or user_info.get('profile', {}).get('display_name')
 
     lookback_hours = int(reaction_config.get('lookback_hours', 24))
@@ -711,6 +724,7 @@ def handle_ban_user(event, reaction_config):
     after_date = (datetime.utcnow() - timedelta(days=pad_days)).strftime('%Y-%m-%d')
     cutoff_ts = time.time() - lookback_hours * 3600
 
+    failures = []
     search_matches = []
     if username or target_user_id:
         try:
@@ -726,6 +740,7 @@ def handle_ban_user(event, reaction_config):
                 f"(@{username}) since {after_date}"
             )
         except Exception as exc:
+            failures.append('search')
             logger.warning(f"Ban: search_user_messages failed for {target_user_id}: {exc}")
     else:
         logger.info(f"Ban: could not resolve user for {target_user_id}; deleting reacted message only")
@@ -746,17 +761,36 @@ def handle_ban_user(event, reaction_config):
     parent_deleted = 0
     replies_deleted = 0
 
-    for msg in matches:
+    def all_matches():
+        # Remove the reacted and indexed messages first; history scans can take
+        # longer, so they must not delay the initial cleanup.
+        yield from matches
+        try:
+            yield from slack.recent_user_messages(target_user_id, cutoff_ts)
+        except Exception as exc:
+            failures.append('history')
+            logger.warning(f'Ban: recent history scan failed: {exc}')
+
+    for msg in all_matches():
         msg_channel = (msg.get('channel') or {}).get('id')
         msg_ts = msg.get('ts')
         if not msg_channel or not msg_ts:
+            continue
+        if (msg_channel, msg_ts) in deleted:
             continue
 
         thread_ts = msg.get('thread_ts')
         is_parent = (not thread_ts) or (thread_ts == msg_ts)
 
         if is_parent:
-            for reply in slack.get_thread_replies(msg_channel, msg_ts):
+            try:
+                replies = slack.get_thread_replies(msg_channel, msg_ts)
+            except Exception as exc:
+                failures.append(f'thread:{msg_channel}:{msg_ts}')
+                logger.warning(f'Ban: thread read failed: {exc}')
+                continue
+            thread_failed = False
+            for reply in replies:
                 reply_ts = reply['ts']
                 reply_user = reply.get('user')
                 key = (msg_channel, reply_ts)
@@ -768,11 +802,19 @@ def handle_ban_user(event, reaction_config):
                         reply_template, reply_user, msg_channel,
                         reply.get('text', '')
                     )
-                    slack.send_dm(reply_user, notification)
+                    try:
+                        slack.send_dm(reply_user, notification)
+                    except Exception as exc:
+                        logger.warning(f'Ban: reply notification failed: {exc}')
 
                 if _delete_message(msg_channel, reply_ts, thread_ts=msg_ts):
                     deleted.add(key)
                     replies_deleted += 1
+                else:
+                    failures.append(f'delete:{msg_channel}:{reply_ts}')
+                    thread_failed = True
+            if thread_failed:
+                continue  # Keep the root discoverable until every reply is removed.
 
         key = (msg_channel, msg_ts)
         if key in deleted:
@@ -780,6 +822,8 @@ def handle_ban_user(event, reaction_config):
         if _delete_message(msg_channel, msg_ts, thread_ts=thread_ts):
             deleted.add(key)
             parent_deleted += 1
+        else:
+            failures.append(f'delete:{msg_channel}:{msg_ts}')
 
     admin_template = reaction_config.get('admin_message')
     if admin_template and moderator:
@@ -788,9 +832,15 @@ def handle_ban_user(event, reaction_config):
             admin_template, target_user_id, user_info,
             parent_deleted, replies_deleted, admin_url
         )
+        if failures:
+            summary = '*Ban cleanup INCOMPLETE — retry required*\n' + summary
         blocks = _build_admin_summary_blocks(summary, target_user_id, admin_url)
         slack.send_dm_blocks(moderator, summary, blocks)
         slack.send_dm(moderator, target_user_id)
+
+    logger.info(f'BAN_CLEANUP_RESULT user={target_user_id} deleted={parent_deleted} replies={replies_deleted} failures={len(failures)}')
+    if failures:
+        raise RuntimeError('Ban cleanup incomplete: ' + ', '.join(failures))
 
 
 action_handlers = {
@@ -861,7 +911,7 @@ def is_duplicate_event(body):
     return False
 
 
-def run(body):
+def _run_event(body):
     print(json.dumps(body))
     if is_duplicate_event(body):
         logger.info(f"duplicate Slack event ignored: {body.get('event_id')}")
@@ -882,6 +932,15 @@ def run(body):
         return
 
     logger.info(f'unsupported event type: {event_type}')
+
+
+def run(body):
+    try:
+        return _run_event(body)
+    except Exception:
+        # Async Lambda retries must be allowed to finish a partially failed action.
+        _seen_event_ids.pop(body.get('event_id'), None)
+        raise
 
 
 def lambda_handler(event, context):
