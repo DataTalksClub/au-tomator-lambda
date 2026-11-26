@@ -109,6 +109,9 @@ def _candidate_tokens():
 def _conversations_get(method, params):
     url = f'https://slack.com/api/{method}'
     tokens = _candidate_tokens()
+    if method == 'conversations.list' and USER_SLACK_TOKEN:
+        # The bot's successful list can omit channels the admin can moderate.
+        tokens = [USER_SLACK_TOKEN]
     last_json = {}
     for idx, token in enumerate(tokens):
         headers = {'Authorization': f'Bearer {token}'}

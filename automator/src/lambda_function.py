@@ -462,7 +462,10 @@ def handle_delete_message(event, reaction_config):
                 thread_dm = util.format_message(thread_message_pattern, thread_values, channel)
                 
                 if thread_dm:
-                    slack.send_dm(reply_user, thread_dm)
+                    try:
+                        slack.send_dm(reply_user, thread_dm)
+                    except Exception as exc:
+                        logger.warning(f'Thread reply notification failed: {exc}')
                 
             # Delete every reply, including bot replies, with its audit context.
             if FAKE_DELETE:
