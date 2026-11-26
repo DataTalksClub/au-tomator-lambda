@@ -104,3 +104,27 @@ def test_delete_message_removes_bot_reply_with_thread_audit_context():
             'message': 'Removed', 'thread_message': 'Parent removed',
         })
         assert api.remove_message.call_args_list == [call('C', '101', thread_ts='100'), call('C', '100')]
+
+
+def test_optional_thread_notification_does_not_prevent_delete():
+    with patch.object(app, 'slack') as api, patch.object(app, 'FAKE_DELETE', False):
+        api.get_message_content.return_value = {'ts': '100', 'user': 'US', 'text': 'spam'}
+        api.get_thread_replies.return_value = [{'ts': '101', 'user': 'UCHILD'}]
+        api.send_dm.side_effect = [RuntimeError('notification unavailable'), {'ok': True}]
+        app.handle_delete_message(ban_event()['event'], {'message': 'Removed', 'thread_message': 'Parent removed'})
+        assert api.remove_message.call_args_list == [call('C', '101', thread_ts='100'), call('C', '100')]
+
+
+def test_retry_of_absent_message_requires_a_successful_read():
+    with patch.object(app, 'slack') as api:
+        api.remove_message.side_effect = RuntimeError('message unavailable for audit')
+        api.is_message_absent.return_value = True
+        with patch.object(app, 'FAKE_DELETE', False):
+            assert app._delete_message('C', '100') is True
+            api.is_message_absent.side_effect = RuntimeError('missing_scope')
+            assert app._delete_message('C', '100') is False
+    with patch.object(slack, '_conversations_get', return_value={'ok': True, 'messages': []}):
+        assert slack.is_message_absent('C', '100') is True
+    with patch.object(slack, '_conversations_get', return_value={'ok': False, 'error': 'missing_scope'}):
+        with pytest.raises(RuntimeError, match='missing_scope'):
+            slack.is_message_absent('C', '100')
