@@ -160,9 +160,6 @@ class TestRouterLambda(unittest.TestCase):
         self.assertEqual(fake_lambda_client.invocations, [])
 
 
-if __name__ == '__main__':
-    unittest.main()
-
 
 class TestBanRetryRouting(unittest.TestCase):
     def test_ban_timeout_retry_is_forwarded_when_first_delivery_may_have_failed(self):
@@ -184,3 +181,6 @@ class TestBanRetryRouting(unittest.TestCase):
                 lambda_function.run({'event': {'type': 'reaction_added',
                     'user': 'U01AXE0P5M3', 'reaction': 'ban-user'}})
 
+
+if __name__ == '__main__':
+    unittest.main()
