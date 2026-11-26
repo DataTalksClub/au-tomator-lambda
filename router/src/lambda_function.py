@@ -63,18 +63,24 @@ def run(body):
     print(f'user: {event_user} (admin: {event_user in admins}), event_type: {event_type}')
 
     if (event_type == 'reaction_added') and (event_user in admins):
-        lambda_client.invoke(
+        result = lambda_client.invoke(
             FunctionName='automator-process-reaction',
             InvocationType='Event',
             Payload=json.dumps(body)
         )
+        if result.get('StatusCode') != 202:
+            raise RuntimeError('Automator async invocation was not accepted')
+        print(f"AUTOMATOR_ACCEPTED event_id={body.get('event_id')}")
 
     if event_type == 'app_mention':
-        lambda_client.invoke(
+        result = lambda_client.invoke(
             FunctionName='automator-process-reaction',
             InvocationType='Event',
             Payload=json.dumps(body)
         )
+        if result.get('StatusCode') != 202:
+            raise RuntimeError('Automator async invocation was not accepted')
+        print(f"AUTOMATOR_ACCEPTED event_id={body.get('event_id')}")
     
     return {
         'statusCode': 200,
@@ -93,8 +99,12 @@ def is_timeout_retry(original_event):
 
 
 def lambda_handler(original_event, context):
-    if is_timeout_retry(original_event):
+    body = extract_body(original_event)
+    event = body.get('event', {})
+    # A timeout does not prove the first delivery reached Lambda. Ban cleanup
+    # must be retried; the automator deduplicates successfully handled events.
+    ban_retry = event.get('type') == 'reaction_added' and event.get('reaction') == 'ban-user'
+    if is_timeout_retry(original_event) and not ban_retry:
         print('Ignoring Slack http_timeout retry')
         return {'statusCode': 200, 'body': 'duplicate'}
-    body = extract_body(original_event)
     return run(body)

@@ -125,12 +125,69 @@ def _conversations_get(method, params):
     return last_json
 
 
+def _conversation_items(method, key, params):
+    """Read every page, and never turn an incomplete read into an empty thread."""
+    messages = []
+    cursors = set()
+    while True:
+        data = _conversations_get(method, params)
+        if not data.get('ok', True):
+            if data.get('error') in {'thread_not_found', 'message_not_found'}:
+                return messages
+            raise RuntimeError(f"{method}: {data.get('error', 'unknown')}")
+        messages.extend(data.get(key, []))
+        cursor = (data.get('response_metadata') or {}).get('next_cursor', '')
+        if not cursor:
+            if data.get('has_more'):
+                raise RuntimeError(f'{method}: incomplete pagination')
+            return messages
+        if cursor in cursors:
+            raise RuntimeError(f'{method}: repeated cursor')
+        cursors.add(cursor)
+        params = dict(params, cursor=cursor)
+
+
+def _conversation_messages(method, params):
+    return _conversation_items(method, 'messages', params)
+
+
+def recent_user_messages(user_id, oldest):
+    """Supplement indexed search with public history and recently active threads."""
+    channels = _conversation_items('conversations.list', 'channels', {
+        'types': 'public_channel', 'exclude_archived': True, 'limit': 200,
+    })
+    for channel in channels:
+        channel_id = channel['id']
+        history = _conversation_messages('conversations.history', {
+            'channel': channel_id, 'limit': 200,
+        })
+        for parent in history:
+            candidates = [parent]
+            # New replies to old roots never reappear in recent history.
+            if parent.get('reply_count') and float(parent.get('latest_reply', oldest)) >= oldest:
+                candidates += get_thread_replies(channel_id, parent['ts'])
+            for message in candidates:
+                if message.get('user') == user_id and float(message['ts']) >= oldest:
+                    yield dict(message, channel={'id': channel_id})
+
+
+def is_message_absent(channel, ts, thread_ts=None):
+    """Prove absence for idempotent retries; permission/read failures still raise."""
+    if thread_ts and thread_ts != ts:
+        messages = _conversation_messages('conversations.replies', {'channel': channel, 'ts': thread_ts})
+    else:
+        messages = _conversation_messages('conversations.history', {
+            'channel': channel, 'latest': ts, 'inclusive': True, 'limit': 1,
+        })
+    return find_message_by_ts(messages, ts) is None
+
+
 def get_message_content(channel, ts, thread_ts=None):
     if thread_ts and thread_ts != ts:
-        thread_json = _conversations_get(
+        messages = _conversation_messages(
             'conversations.replies', {'channel': channel, 'ts': thread_ts}
         )
-        message = find_message_by_ts(thread_json.get('messages', []), ts)
+        message = find_message_by_ts(messages, ts)
         if message:
             return message
 
@@ -151,17 +208,11 @@ def get_message_content(channel, ts, thread_ts=None):
 
 def get_thread_replies(channel, ts, include_parent=False):
     """Get all replies in a thread (optionally including the parent message)"""
-    response_json = _conversations_get(
+    all_messages = _conversation_messages(
         'conversations.replies', {'channel': channel, 'ts': ts}
     )
-    if not response_json.get('ok', True):
-        return []
-
-    all_messages = response_json.get('messages', [])
     if include_parent:
         return all_messages
-
-    # Filter out the parent message (first message with ts == thread_ts)
     return [msg for msg in all_messages if msg['ts'] != ts]
 
 
@@ -297,8 +348,7 @@ def _run_search_messages(query):
         response_json = response.json()
 
         if not response_json.get('ok'):
-            logger.info(f"search.messages failed: {response_json.get('error')}")
-            break
+            raise RuntimeError(f"search.messages: {response_json.get('error', 'unknown')}")
 
         page_info = response_json.get('messages', {})
         matches.extend(page_info.get('matches', []))

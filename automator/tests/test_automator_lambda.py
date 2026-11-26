@@ -960,7 +960,8 @@ class TestBanUser(unittest.TestCase):
             'reaction': 'ban-user',
         }
         with patch('automator_lambda_function.FAKE_DELETE', False):
-            lambda_function.handle_ban_user(event, self._base_reaction_config())
+            with self.assertRaisesRegex(RuntimeError, 'Ban cleanup incomplete'):
+                lambda_function.handle_ban_user(event, self._base_reaction_config())
 
         mock_slack.remove_message.assert_called_once_with(
             'C_AAA', '1234567890.000100'
@@ -1067,7 +1068,8 @@ class TestBanUser(unittest.TestCase):
 
         with patch('automator_lambda_function.time.time', return_value=1234567890.0 + 1000), \
              patch('automator_lambda_function.FAKE_DELETE', False):
-            lambda_function.handle_ban_user(event, self._base_reaction_config())
+            with self.assertRaisesRegex(RuntimeError, 'Ban cleanup incomplete'):
+                lambda_function.handle_ban_user(event, self._base_reaction_config())
 
         self.assertEqual(mock_slack.remove_message.call_count, 2)
         mock_slack.send_dm_blocks.assert_called_once()
@@ -1729,7 +1731,7 @@ class TestSlackThreadReplies(unittest.TestCase):
         self.assertEqual(len(all_msgs), 2)
 
     @patch('slack.requests.get')
-    def test_get_thread_replies_error_response_returns_empty_list(self, mock_get):
+    def test_get_thread_replies_error_response_raises(self, mock_get):
         from slack import get_thread_replies
 
         mock_resp = MagicMock()
@@ -1739,8 +1741,8 @@ class TestSlackThreadReplies(unittest.TestCase):
         }
         mock_get.return_value = mock_resp
 
-        res = get_thread_replies('C_BAD', '100.0', include_parent=True)
-        self.assertEqual(res, [])
+        with self.assertRaisesRegex(RuntimeError, 'channel_not_found'):
+            get_thread_replies('C_BAD', '100.0', include_parent=True)
 
     @patch('slack.requests.get')
     def test_get_message_content_falls_back_to_user_token(self, mock_get):
